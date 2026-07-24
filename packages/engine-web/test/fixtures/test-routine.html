@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8" /><title>fixture</title></head>
+<body>
+  <div id="login-section">
+    <input id="username" type="text" />
+    <input id="password" type="password" />
+    <button id="login-btn">Login</button>
+  </div>
+  <div id="otp-section" style="display:none">
+    <input id="otp-input" type="text" />
+    <button id="otp-btn">Submit OTP</button>
+    <div id="otp-error" style="display:none">wrong code</div>
+  </div>
+  <div id="result-section" style="display:none">
+    <span id="balance">4,320 &#8362;</span>
+  </div>
+  <script>
+    document.getElementById('login-btn').addEventListener('click', () => {
+      const u = document.getElementById('username').value;
+      const p = document.getElementById('password').value;
+      if (u === 'demo' && p === 'secret') {
+        document.getElementById('login-section').style.display = 'none';
+        document.getElementById('otp-section').style.display = 'block';
+      }
+    });
+    document.getElementById('otp-btn').addEventListener('click', () => {
+      const code = document.getElementById('otp-input').value;
+      if (code === '123456') {
+        document.getElementById('otp-section').style.display = 'none';
+        document.getElementById('result-section').style.display = 'block';
+      } else {
+        document.getElementById('otp-error').style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>
