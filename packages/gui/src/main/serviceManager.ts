@@ -20,7 +20,12 @@ export function startService(): { running: boolean; port: number } {
   const entry = path.join(__dirname, "..", "..", "..", "mcp-server", "dist", "index.js");
   child = spawn(process.execPath, [entry], {
     stdio: "inherit",
-    env: process.env,
+    // Run the Electron binary as plain Node (ELECTRON_RUN_AS_NODE) instead of
+    // spawning a second Electron app, and - just as importantly - so this
+    // child process loads native modules (better-sqlite3) with the same ABI
+    // that `electron-rebuild` (see package.json postinstall) built them for.
+    // A plain system `node` process here would mismatch that ABI.
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
   });
   child.on("exit", () => {
     child = undefined;

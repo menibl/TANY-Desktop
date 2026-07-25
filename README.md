@@ -48,15 +48,23 @@ npm run build
 ```
 
 ### הרצה בזמן פיתוח/בדיקה
-פותחים שני חלונות טרמינל:
+
+**האופן הפשוט (מומלץ):** מריצים רק את ה-GUI -
 
 ```powershell
-# שרת ה-MCP (זה שיתחבר ל-TANY בעתיד)
-npm run dev:server
-
-# ה-GUI המקומי (הקלטה, רשימת שגרות, דיבאג)
 npm run dev:gui
 ```
+
+ובתוך ה-GUI עצמו לוחצים על **"הפעל שירות"** כדי להריץ את שרת ה-MCP ברקע. ה-GUI וה-MCP server חולקים אותו מאגר SQLite ואותו מודול native (`better-sqlite3`) - `npm install` בונה אותו אוטומטית מול Electron's ABI (`electron-rebuild`, ראו הערה למטה), וכשה-GUI מפעיל את השירות הוא עושה זאת דרך ה-Node הפנימי של Electron (`ELECTRON_RUN_AS_NODE`) כדי שה-ABI יתאים.
+
+**להרצת שרת ה-MCP כתהליך עצמאי** (למשל כדי לדמות בדיוק את פריסת הייצור האמיתית - Scheduled Task עם `node` רגיל, לא Electron):
+
+```powershell
+npm rebuild better-sqlite3     # מחזיר את המודול native ל-ABI של Node רגיל
+npm run dev:server
+```
+
+**חשוב:** אי אפשר להריץ את `npm run dev:server` (Node רגיל) ואת `npm run dev:gui` (Electron) בו-זמנית מאותה התקנה - הם צריכים build שונה (ABI שונה) של `better-sqlite3`, כי Electron מטמיע גרסת Node פנימית משלו. תעברו בין המצבים עם `npm rebuild better-sqlite3` (ל-Node רגיל) / `npx @electron/rebuild -f -w better-sqlite3` (ל-Electron) לפי הצורך, או פשוט תמיד תשתמשו בכפתור "הפעל שירות" בתוך ה-GUI.
 
 ב-GUI: "שגרה חדשה" → הזינו כתובת התחלה → "התחל הקלטה" → מבצעים את התהליך בדפדפן שנפתח (Playwright Inspector) → סוגרים את חלון ההקלטה → מסמנים אילו שדות הם סוד (סיסמה) או שלב הזרקת OTP → נותנים שם וניסוחי הפעלה → שומרים. אחר כך "הרץ עכשיו" מריץ ומציג תוצאה, כולל טופס להזנת קוד OTP אם נדרש.
 
