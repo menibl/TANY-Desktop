@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { dialog, ipcMain } from "electron";
 import { getOrCreateDevice, renameDevice, loadAuthState, saveAuthState } from "@tany-desktop/shared";
 import {
   recordWebRoutine,
@@ -7,6 +7,7 @@ import {
   finishLoginSession,
   cancelLoginSession,
 } from "@tany-desktop/engine-web";
+import { recordDesktopRoutine } from "@tany-desktop/engine-desktop";
 import * as routineService from "./routineService";
 import type { SaveRoutineInput } from "./routineService";
 import { getServiceStatus, startService, stopService } from "./serviceManager";
@@ -50,6 +51,22 @@ export function registerIpcHandlers(): void {
     return { success: true };
   });
   ipcMain.handle("recording:loginCancel", (_e, routineId: string) => cancelLoginSession(routineId));
+
+  // Desktop routines (spec section 4/11): no prior-login/auth-state concept
+  // like web's Google/Microsoft flow - UI Automation drives the app's own
+  // window directly, so this is just launch-and-record.
+  ipcMain.handle("recording:startDesktop", (_e, args: { exePath: string }) =>
+    recordDesktopRoutine(args.exePath)
+  );
+
+  ipcMain.handle("dialog:pickExe", async () => {
+    const result = await dialog.showOpenDialog({
+      title: "בחר קובץ הפעלה (.exe)",
+      filters: [{ name: "Executable", extensions: ["exe"] }],
+      properties: ["openFile"],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
 
   ipcMain.handle("service:status", () => getServiceStatus());
   ipcMain.handle("service:start", () => startService());

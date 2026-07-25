@@ -8,6 +8,7 @@ let newRoutineState = null; // { type, startUrl, steps, editingRoutineId, existi
 
 const STEP_LABELS = {
   goto: "פתיחת עמוד",
+  launch: "הפעלת תוכנה",
   click: "לחיצה",
   fill: "מילוי שדה",
   press: "לחיצת מקש",
@@ -75,9 +76,21 @@ function wireLoginFlow(root, startBtn, routineId, getUrl, statusEl, onSuccess) {
 }
 
 function describeSelector(step) {
-  if (step.type === "goto") return step.url || "";
+  if (step.type === "goto" || step.type === "launch") return step.url || "";
   if (!step.selectorKind) return step.key ? `מקש: ${step.key}` : "";
   if (step.selectorKind === "role") return `role=${step.role}${step.name ? ` name="${step.name}"` : ""}`;
+  if (step.selectorKind === "uia") {
+    try {
+      const sel = JSON.parse(step.selector || "{}");
+      const parts = [];
+      if (sel.automationId) parts.push(`id="${sel.automationId}"`);
+      if (sel.name) parts.push(`name="${sel.name}"`);
+      if (sel.controlType) parts.push(`type=${sel.controlType}`);
+      return parts.join(" ") || "אלמנט (ללא מזהה)";
+    } catch {
+      return "אלמנט";
+    }
+  }
   return `${step.selectorKind}="${step.selector ?? ""}"`;
 }
 
@@ -295,7 +308,14 @@ function startNewRoutineFlow(opts = {}) {
   });
 
   const startUrlInput = root.querySelector(".new-start-url");
-  startUrlInput.value = newRoutineState.startUrl;
+  startUrlInput.value = newRoutineState.type === "web" ? newRoutineState.startUrl : "";
+
+  const exePathInput = root.querySelector(".new-exe-path");
+  exePathInput.value = newRoutineState.type === "desktop" ? newRoutineState.startUrl : "";
+  root.querySelector(".pick-exe-btn").addEventListener("click", async () => {
+    const picked = await window.tany.dialog.pickExe();
+    if (picked) exePathInput.value = picked;
+  });
 
   const recordingStatus = root.querySelector(".recording-status");
   const loginStatus = root.querySelector(".login-status");
@@ -332,6 +352,36 @@ function startNewRoutineFlow(opts = {}) {
       renderNewSteps(stepsReview);
     } catch (err) {
       recordingStatus.textContent = `שגיאת הקלטה: ${err.message || err}`;
+    } finally {
+      e.target.disabled = false;
+    }
+  });
+
+  function requireExePath() {
+    const exePath = exePathInput.value.trim();
+    if (!exePath) {
+      alert("יש להזין נתיב לקובץ הפעלה");
+      return null;
+    }
+    newRoutineState.startUrl = exePath;
+    return exePath;
+  }
+
+  const recordingStatusDesktop = root.querySelector(".recording-status-desktop");
+  root.querySelector(".start-recording-desktop-btn").addEventListener("click", async (e) => {
+    const exePath = requireExePath();
+    if (!exePath) return;
+    e.target.disabled = true;
+    recordingStatusDesktop.textContent =
+      "מקליט... בצעו את התהליך בתוכנה שנפתחה, ואז לחצו 'סיימתי - עצור הקלטה' בחלון הקטן.";
+    try {
+      const steps = await window.tany.recording.startDesktop(exePath);
+      newRoutineState.steps = steps;
+      recordingStatusDesktop.textContent = `ההקלטה הסתיימה - נקלטו ${steps.length} שלבים.`;
+      stepsReview.style.display = "block";
+      renderNewSteps(stepsReview);
+    } catch (err) {
+      recordingStatusDesktop.textContent = `שגיאת הקלטה: ${err.message || err}`;
     } finally {
       e.target.disabled = false;
     }

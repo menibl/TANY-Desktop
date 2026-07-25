@@ -91,7 +91,7 @@
         <label>סוג שגרה</label>
         <select class="new-type">
           <option value="web">אתר (דפדפן)</option>
-          <option value="desktop">תוכנת דסקטופ (Phase 2 - לא זמין עדיין)</option>
+          <option value="desktop">תוכנת דסקטופ (UI Automation)</option>
         </select>
       </section>
       <section class="web-only">
@@ -111,7 +111,15 @@
         <p class="recording-status muted"></p>
       </section>
       <section class="desktop-only" style="display:none">
-        <p class="hint">אוטומציית דסקטופ (Power Automate Desktop) עדיין לא מומשה במחשב זה - ראו packages/engine-desktop/README.md.</p>
+        <label>נתיב קובץ הפעלה (.exe)</label>
+        <div style="display:flex; gap:6px">
+          <input type="text" class="new-exe-path" placeholder="C:\Program Files\...\app.exe" style="flex:1" />
+          <button class="pick-exe-btn">בחר קובץ...</button>
+        </div>
+        <p class="hint">התוכנה תיפתח אוטומטית עם תחילת ההקלטה. בצעו את התהליך בחלון שנפתח, ואז לחצו "סיימתי - עצור הקלטה" בחלון הקטן שיופיע. מבוסס Windows UI Automation - ראו <code>packages/engine-desktop/README.md</code> לגבי מגבלות ידועות.</p>
+
+        <button class="start-recording-desktop-btn primary">התחל הקלטה</button>
+        <p class="recording-status-desktop muted"></p>
       </section>
 
       <section class="steps-review" style="display:none">
