@@ -17,8 +17,10 @@ const api = {
   recording: {
     start: (routineId: string, startUrl: string) =>
       ipcRenderer.invoke("recording:start", { routineId, startUrl }),
-    login: (routineId: string, startUrl: string) =>
-      ipcRenderer.invoke("recording:login", { routineId, startUrl }),
+    loginStart: (routineId: string, startUrl: string) =>
+      ipcRenderer.invoke("recording:loginStart", { routineId, startUrl }),
+    loginFinish: (routineId: string) => ipcRenderer.invoke("recording:loginFinish", routineId),
+    loginCancel: (routineId: string) => ipcRenderer.invoke("recording:loginCancel", routineId),
   },
   service: {
     status: () => ipcRenderer.invoke("service:status"),

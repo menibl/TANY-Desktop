@@ -2,6 +2,7 @@ import { app, BrowserWindow } from "electron";
 import * as path from "path";
 import { registerIpcHandlers } from "./ipc";
 import { getOrCreateDevice } from "@tany-desktop/shared";
+import { cancelAllLoginSessions } from "@tany-desktop/engine-web";
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -29,4 +30,10 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+// Don't leave an orphaned plain-Chrome window/temp profile behind if the
+// user quits mid-login (see engine-web/recorder.ts's startLoginSession).
+app.on("before-quit", () => {
+  void cancelAllLoginSessions();
 });

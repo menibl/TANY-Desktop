@@ -51,7 +51,11 @@
         <h3>התחברות שמורה</h3>
         <div class="auth-status"></div>
         <button class="refresh-login-btn">רענון התחברות</button>
-        <p class="hint">לשגרות באתרים שדורשים כניסה דרך Google/Microsoft וכד' - אם ההרצה מתחילה להיכשל בגלל שהחיבור פג, לוחצים כאן ומתחברים מחדש בחלון שנפתח.</p>
+        <div class="login-active-controls" style="display:none">
+          <button class="login-finish-btn primary">✅ סיימתי להתחבר - שמור</button>
+          <button class="login-cancel-btn">❌ בטל</button>
+        </div>
+        <p class="hint">לשגרות באתרים שדורשים כניסה דרך Google/Microsoft וכד' - אם ההרצה מתחילה להיכשל בגלל שהחיבור פג, לוחצים כאן, מתחברים ידנית בחלון Chrome שנפתח, ואז לוחצים "סיימתי להתחבר".</p>
       </section>
       <section>
         <h3>רצף פעולות מוקלט</h3>
@@ -90,7 +94,11 @@
         <input type="text" class="new-start-url" placeholder="https://example.com" />
 
         <button class="login-btn">🔐 התחברות חד-פעמית (מומלץ אם נדרש Google/Microsoft Login)</button>
-        <p class="hint">אם האתר דורש התחברות דרך גוגל/מיקרוסופט וכד' - מומלץ ללחוץ כאן קודם ולהתחבר ידנית פעם אחת. גוגל חוסם התחברות אוטומטית, אז השלב הזה מבוצע פעם אחת ונשמר לשימוש חוזר בהקלטה ובהרצות עתידיות.</p>
+        <p class="hint">אם האתר דורש התחברות דרך גוגל/מיקרוסופט וכד' - מומלץ ללחוץ כאן קודם. ייפתח חלון Chrome רגיל (לא אוטומטי) - מתחברים בו ידנית, ואז לוחצים "סיימתי להתחבר". גוגל חוסם התחברות אוטומטית, אז השלב הזה מבוצע פעם אחת ונשמר לשימוש חוזר בהקלטה ובהרצות עתידיות.</p>
+        <div class="login-active-controls" style="display:none">
+          <button class="login-finish-btn primary">✅ סיימתי להתחבר - שמור</button>
+          <button class="login-cancel-btn">❌ בטל</button>
+        </div>
         <p class="login-status muted"></p>
 
         <button class="start-recording-btn primary">התחל הקלטה</button>

@@ -17,6 +17,63 @@ const STEP_LABELS = {
   otp_injection: "הזרקת OTP",
 };
 
+/**
+ * Wires the two-step one-time-login UI used both in the new-routine wizard
+ * and the routine detail view's "refresh login" section: click startBtn ->
+ * opens a plain, unmanaged Chrome window (main process) -> user logs in
+ * manually -> click "done" to capture+save the session, or "cancel" to
+ * abort. See engine-web/recorder.ts for why this can't be one click.
+ */
+function wireLoginFlow(root, startBtn, routineId, getUrl, statusEl, onSuccess) {
+  const controls = root.querySelector(".login-active-controls");
+  const finishBtn = root.querySelector(".login-finish-btn");
+  const cancelBtn = root.querySelector(".login-cancel-btn");
+
+  startBtn.addEventListener("click", async () => {
+    const url = getUrl();
+    if (!url) return;
+    startBtn.disabled = true;
+    statusEl.textContent = "נפתח חלון Chrome - התחברו ידנית, ואז לחצו 'סיימתי להתחבר'.";
+    try {
+      await window.tany.recording.loginStart(routineId, url);
+      controls.style.display = "flex";
+    } catch (err) {
+      statusEl.textContent = `שגיאת התחברות: ${err.message || err}`;
+      startBtn.disabled = false;
+    }
+  });
+
+  finishBtn.addEventListener("click", async () => {
+    finishBtn.disabled = true;
+    cancelBtn.disabled = true;
+    try {
+      await window.tany.recording.loginFinish(routineId);
+      controls.style.display = "none";
+      startBtn.disabled = false;
+      onSuccess();
+    } catch (err) {
+      statusEl.textContent = `שגיאה בשמירת ההתחברות: ${err.message || err}`;
+    } finally {
+      finishBtn.disabled = false;
+      cancelBtn.disabled = false;
+    }
+  });
+
+  cancelBtn.addEventListener("click", async () => {
+    cancelBtn.disabled = true;
+    finishBtn.disabled = true;
+    try {
+      await window.tany.recording.loginCancel(routineId);
+    } finally {
+      controls.style.display = "none";
+      statusEl.textContent = "ההתחברות בוטלה.";
+      startBtn.disabled = false;
+      cancelBtn.disabled = false;
+      finishBtn.disabled = false;
+    }
+  });
+}
+
 function describeSelector(step) {
   if (step.type === "goto") return step.url || "";
   if (!step.selectorKind) return step.key ? `מקש: ${step.key}` : "";
@@ -129,25 +186,19 @@ async function selectRoutine(routineId) {
   });
 
   const authStatusEl = root.querySelector(".auth-status");
+  authStatusEl.textContent = "";
   authStatusEl.innerHTML = detail.hasAuthState
     ? '<span class="badge online">מחובר</span>'
     : "<span class='muted'>אין התחברות שמורה לשגרה זו</span>";
 
-  root.querySelector(".refresh-login-btn").addEventListener("click", async (e) => {
-    if (!detail.definition.startUrl) {
-      alert("לשגרה הזו אין כתובת התחלה שמורה");
-      return;
-    }
-    e.target.disabled = true;
-    authStatusEl.innerHTML = "<span class='muted'>נפתח חלון להתחברות...</span>";
-    try {
-      await window.tany.recording.login(routineId, detail.definition.startUrl);
-      authStatusEl.innerHTML = '<span class="badge online">מחובר</span>';
-    } catch (err) {
-      authStatusEl.innerHTML = `<span class="badge failed">שגיאה: ${escapeHtml(err.message || String(err))}</span>`;
-    } finally {
-      e.target.disabled = false;
-    }
+  function getDetailStartUrl() {
+    if (detail.definition.startUrl) return detail.definition.startUrl;
+    alert("לשגרה הזו אין כתובת התחלה שמורה");
+    return null;
+  }
+
+  wireLoginFlow(root, root.querySelector(".refresh-login-btn"), routineId, getDetailStartUrl, authStatusEl, () => {
+    authStatusEl.innerHTML = '<span class="badge online">מחובר</span>';
   });
 
   const resultSection = root.querySelector(".run-result-section");
@@ -245,19 +296,8 @@ function startNewRoutineFlow(opts = {}) {
     return url;
   }
 
-  root.querySelector(".login-btn").addEventListener("click", async (e) => {
-    const url = requireUrl();
-    if (!url) return;
-    e.target.disabled = true;
-    loginStatus.textContent = "נפתח דפדפן להתחברות - התחברו ידנית ואז סגרו את החלון.";
-    try {
-      await window.tany.recording.login(newRoutineState.routineId, url);
-      loginStatus.textContent = "ההתחברות נשמרה. אפשר להמשיך להקלטה.";
-    } catch (err) {
-      loginStatus.textContent = `שגיאת התחברות: ${err.message || err}`;
-    } finally {
-      e.target.disabled = false;
-    }
+  wireLoginFlow(root, root.querySelector(".login-btn"), newRoutineState.routineId, requireUrl, loginStatus, () => {
+    loginStatus.textContent = "ההתחברות נשמרה. אפשר להמשיך להקלטה.";
   });
 
   root.querySelector(".start-recording-btn").addEventListener("click", async (e) => {
