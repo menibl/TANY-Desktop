@@ -128,6 +128,8 @@ node packages/engine-web/test/replay.smoketest.js   # הרצה, הזרקת crede
 
 ## מפת דרכים ל-Phase 2 (חיבור בפועל ל-TANY)
 
+מדריך שילוב מפורט לצוות שמפתח את צד TANY (endpoints מדויקים, דוגמאות בקשה/תשובה אמיתיות מהשרת, ומה עדיין חסר) נמצא ב-[`docs/TANY_INTEGRATION.md`](docs/TANY_INTEGRATION.md).
+
 לפי חלק ב'+ג' של מסמך האפיון, נדרש (לא מומש עדיין):
 
 1. **Tunnel**: הטמעת frpc בתוך תהליך TANY DESKTOP כדי לחשוף את שרת ה-MCP המקומי לאינטרנט דרך frps שיוקם על תשתית TANY (סעיף 13.1) - כרגע השרת מאזין על `127.0.0.1` בלבד.
