@@ -3,13 +3,37 @@
   Installs the TANY DESKTOP background service (MCP server + automation
   engines) as a Windows Scheduled Task that starts automatically with the
   computer and keeps running whether a user is logged on or not - per spec
-  section 9 ("שירות רקע (Auto-start)").
+  section 9 ("שירות רקע (Auto-start)"). Optionally wires up the frpc tunnel
+  to TANY cloud (spec section 13) in the same run.
 
 .DESCRIPTION
   Uses a Scheduled Task rather than a classic Windows Service because the
   "Run whether user is logged on or not" logon type only exists on Scheduled
   Tasks, and is exactly the behaviour the spec asks for. This still runs
   the process with Admin rights (RunLevel Highest).
+
+  Beyond just registering the task, this also performs everything that was
+  found (the hard way, via manual troubleshooting on a real machine) to be
+  required for the task to actually stay running, none of which
+  Register-ScheduledTask/npm handle on their own:
+
+  - Rebuilds the better-sqlite3 native module for plain Node's ABI. The GUI
+    runs it through Electron (ELECTRON_RUN_AS_NODE), which needs a
+    different native build - if that ran more recently than this script,
+    the module is left compiled for Electron's ABI and a plain `node.exe`
+    (what the Scheduled Task uses) fails to load it at all
+    (ERR_DLOPEN_FAILED / NODE_MODULE_VERSION mismatch).
+  - Grants the "Log on as a batch job" user right (SeBatchLogonRight) to
+    the task's account. Register-ScheduledTask does NOT reliably grant this
+    itself for freshly-created local accounts - without it, Task Scheduler
+    accepts the registration but every launch fails silently at logon
+    (LogonUserExEx, Win32 error 1385/ERROR_LOGON_TYPE_NOT_GRANTED) and the
+    task never actually starts.
+  - Grants the task's account Full Control over the data directory
+    (%ProgramData%\TanyDesktop by default). This only matters if the task
+    runs as a different Windows account than whoever first ran the GUI/an
+    earlier manual test - that account owns the files there (DB, master
+    key, frpc config) and a different account is denied access to them.
 
   NOTE (see spec section 9's "תרחיש נתמך"): UI automation - both Playwright
   (headed mode) and, once implemented, Power Automate Desktop - needs an
@@ -25,17 +49,42 @@
 .PARAMETER NodePath
   Path to node.exe (defaults to whatever `node` resolves to on PATH).
 
+.PARAMETER FrpsAddr
+  Public address of the frps server (spec section 13.1). If given, this
+  script sets the four TANY_DESKTOP_FRPS_*/FRP_REMOTE_PORT environment
+  variables (machine-wide) and downloads frpc.exe (via get-frpc.ps1) if it
+  isn't already present, so the tunnel comes up automatically once the
+  task starts. Omit entirely to keep running local-only, exactly as before.
+
+.PARAMETER FrpsPort
+  frps control port. Defaults to 7000 (frp's own default).
+
+.PARAMETER FrpsToken
+  Shared auth token configured on frps. Required if -FrpsAddr is given.
+
+.PARAMETER FrpRemotePort
+  The port frps exposes this device's MCP server on. Required if -FrpsAddr
+  is given.
+
 .EXAMPLE
-  Run from an elevated PowerShell prompt:
+  Run from an elevated PowerShell prompt, local-only (no tunnel):
     .\install-scheduled-task.ps1
   You'll be prompted for the credentials of the Windows account the task
   should run as (needed for "run whether user is logged on or not").
+
+.EXAMPLE
+  With the frpc tunnel to a GCP frps wired up in the same run:
+    .\install-scheduled-task.ps1 -FrpsAddr 34.165.176.172 -FrpsToken "<token>" -FrpRemotePort 6000
 #>
 [CmdletBinding()]
 param(
   [string]$RepoPath = (Split-Path -Parent $PSScriptRoot),
   [string]$NodePath = (Get-Command node -ErrorAction SilentlyContinue).Source,
-  [string]$TaskName = "TANYDesktopService"
+  [string]$TaskName = "TANYDesktopService",
+  [string]$FrpsAddr,
+  [int]$FrpsPort = 7000,
+  [string]$FrpsToken,
+  [int]$FrpRemotePort
 )
 
 $ErrorActionPreference = "Stop"
@@ -53,11 +102,73 @@ if (-not (Test-Path $entryScript)) {
   throw "Build output not found at $entryScript. Run 'npm install && npm run build' in $RepoPath first."
 }
 
+if ($FrpsAddr -and (-not $FrpsToken -or -not $FrpRemotePort)) {
+  throw "-FrpsToken and -FrpRemotePort are required when -FrpsAddr is given."
+}
+
 Write-Host "Registering scheduled task '$TaskName'..."
 Write-Host "  node:  $NodePath"
 Write-Host "  entry: $entryScript"
 
 $credential = Get-Credential -Message "Windows account TANY DESKTOP should run as (needs to stay valid - required for 'run whether user is logged on or not')"
+$accountName = $credential.UserName
+
+# ---- Native module ABI: the Scheduled Task always runs plain node.exe,
+# never Electron, regardless of what the GUI last built the module for. ----
+Write-Host "Rebuilding better-sqlite3 for plain Node's ABI..."
+Push-Location $RepoPath
+try {
+  & npm rebuild better-sqlite3
+  if ($LASTEXITCODE -ne 0) {
+    throw "npm rebuild better-sqlite3 failed (exit $LASTEXITCODE). Close the GUI and any other node/electron processes for this repo (they lock the native module file) and re-run this script."
+  }
+} finally {
+  Pop-Location
+}
+
+# ---- Data directory ACL: only matters if $accountName differs from
+# whoever's account already owns these files, but harmless either way. ----
+$dataDir = if ($env:TANY_DESKTOP_DATA_DIR) { $env:TANY_DESKTOP_DATA_DIR } else { Join-Path $env:ProgramData "TanyDesktop" }
+New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+Write-Host "Granting '$accountName' full control over $dataDir..."
+& icacls $dataDir /grant "${accountName}:(OI)(CI)F" /T | Out-Null
+
+# ---- "Log on as a batch job" right: without this, Register-ScheduledTask
+# succeeds but every launch fails logon silently (Win32 1385). Append to
+# the existing SeBatchLogonRight list rather than overwrite it, so other
+# accounts/groups already granted it (e.g. built-in Administrators) keep it.
+# Must round-trip through secedit as Unicode - plain Get-Content/Set-Content
+# defaults corrupt the file's declared [Unicode] encoding and secedit then
+# fails the whole import with "No mapping between account names and
+# security IDs was done." ----
+Write-Host "Granting '$accountName' the 'Log on as a batch job' right..."
+$sid = (New-Object System.Security.Principal.NTAccount($accountName)).Translate([System.Security.Principal.SecurityIdentifier]).Value
+$secpolPath = Join-Path $env:TEMP "tany-desktop-secpol.cfg"
+$secdbPath = Join-Path $env:TEMP "tany-desktop-secedit.sdb"
+& secedit /export /cfg $secpolPath /areas USER_RIGHTS | Out-Null
+$secpolContent = Get-Content $secpolPath -Encoding Unicode
+if ($secpolContent -match "^\s*SeBatchLogonRight\s*=") {
+  $secpolContent = $secpolContent -replace '(SeBatchLogonRight\s*=\s*)(.*)', "`$1`$2,*$sid"
+} else {
+  $secpolContent += "SeBatchLogonRight = *$sid"
+}
+$secpolContent | Set-Content $secpolPath -Encoding Unicode
+& secedit /configure /db $secdbPath /cfg $secpolPath /areas USER_RIGHTS | Out-Null
+Remove-Item $secpolPath, $secdbPath -ErrorAction SilentlyContinue
+
+# ---- Optional frpc tunnel wiring ----
+if ($FrpsAddr) {
+  $frpcPath = Join-Path $dataDir "bin\frpc.exe"
+  if (-not (Test-Path $frpcPath)) {
+    Write-Host "frpc.exe not found - downloading via get-frpc.ps1..."
+    & (Join-Path $PSScriptRoot "get-frpc.ps1") -Destination $frpcPath
+  }
+  Write-Host "Setting frpc tunnel environment variables (machine-wide)..."
+  [Environment]::SetEnvironmentVariable("TANY_DESKTOP_FRPS_ADDR", $FrpsAddr, "Machine")
+  [Environment]::SetEnvironmentVariable("TANY_DESKTOP_FRPS_PORT", $FrpsPort, "Machine")
+  [Environment]::SetEnvironmentVariable("TANY_DESKTOP_FRPS_TOKEN", $FrpsToken, "Machine")
+  [Environment]::SetEnvironmentVariable("TANY_DESKTOP_FRP_REMOTE_PORT", $FrpRemotePort, "Machine")
+}
 
 $action = New-ScheduledTaskAction -Execute $NodePath -Argument "`"$entryScript`"" -WorkingDirectory $RepoPath
 $trigger = New-ScheduledTaskTrigger -AtStartup
@@ -78,14 +189,24 @@ Register-ScheduledTask `
   -Action $action `
   -Trigger $trigger `
   -Settings $settings `
-  -User $credential.UserName `
+  -User $accountName `
   -Password $credential.GetNetworkCredential().Password `
   -RunLevel Highest `
   -Force | Out-Null
 
 Write-Host "Installed. Starting it now..."
 Start-ScheduledTask -TaskName $TaskName
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 5
 Get-ScheduledTaskInfo -TaskName $TaskName | Format-List
 
-Write-Host "Done. Check http://127.0.0.1:8765/health once the task is running."
+Write-Host "Checking health endpoint..."
+try {
+  Invoke-RestMethod http://127.0.0.1:8765/health | Format-List
+} catch {
+  Write-Warning "Health check failed - the task may need a few more seconds, or check Task Scheduler's history for '$TaskName'."
+}
+
+if ($FrpsAddr) {
+  Write-Host "Checking frpc tunnel process..."
+  Get-Process frpc -ErrorAction SilentlyContinue | Format-Table Id, ProcessName, CPU
+}

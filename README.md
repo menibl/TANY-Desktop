@@ -96,7 +96,17 @@ cd scripts
 .\install-scheduled-task.ps1
 ```
 
+(עם טאנל frpc מוגדר באותה הרצה - ראו "חיבור מרחוק" למטה):
+```powershell
+.\install-scheduled-task.ps1 -FrpsAddr <IP-ה-frps> -FrpsToken <טוקן> -FrpRemotePort <פורט>
+```
+
 הסקריפט ירשום Scheduled Task בשם `TANYDesktopService` שמריץ את שרת ה-MCP (`packages/mcp-server/dist/index.js`) עם עליית המחשב, כולל "Run whether user is logged on or not", בהתאם לסעיף 9 באפיון. הסרה: `.\uninstall-scheduled-task.ps1`.
+
+מעבר לרישום עצמו, הסקריפט גם מבצע כל מה שהתברר בפועל (על מכונת Windows אמיתית) כהכרחי כדי שהמשימה באמת תישאר רצה - אף אחד מהם לא קורה אוטומטית מ-`Register-ScheduledTask`/`npm` לבד:
+- **בונה מחדש את `better-sqlite3`** ל-ABI של Node רגיל - ה-GUI מריץ אותו דרך Electron (ABI אחר), וללא rebuild התהליך קורס עם `ERR_DLOPEN_FAILED`/`NODE_MODULE_VERSION mismatch` ברגע שה-Task (שמריץ `node.exe` רגיל) מנסה לעלות.
+- **מעניק את ההרשאה "Log on as a batch job"** (`SeBatchLogonRight`) לחשבון שבחרתם - בלעדיה הרישום מצליח אבל כל הפעלה נכשלת בשקט ב-logon (Win32 1385), וה-Task אף פעם לא באמת עולה.
+- **מעניק הרשאת Full Control** על תיקיית הנתונים (`%ProgramData%\TanyDesktop`) לאותו חשבון - נדרש אם ה-Task רץ תחת חשבון שונה ממי שהריץ את ה-GUI לראשונה.
 
 **הערה חשובה על אוטומציית UI במסך נעול:** גם Playwright (במצב headed) וגם - כשיתווסף - Power Automate Desktop דורשים session גרפי אינטראקטיבי אמיתי כדי להריץ אוטומציה שדורשת חלון גלוי. תהליך שרץ ללא משתמש מחובר כלל לא רואה שולחן עבודה. לכן, בדיוק כפי שהאפיון מציין ("תרחיש נתמך: מחשב ייעודי שנשאר דלוק/פתוח"), התרחיש הנתמך בפועל הוא מחשב ייעודי שנשאר דלוק ומחובר. שגרות Playwright שרצות ב-headless (ברירת המחדל שלנו) לא מושפעות ממגבלה זו.
 
@@ -106,19 +116,23 @@ cd scripts
 
 **להפעלה בפועל, ברגע שיש שרת frps אמיתי:**
 
+**הדרך הפשוטה (מומלץ):** `install-scheduled-task.ps1 -FrpsAddr ... -FrpsToken ... -FrpRemotePort ...` (ראו "התקנה כשירות רקע קבוע" למעלה) - מוריד את `frpc.exe` אוטומטית אם חסר, ומגדיר את משתני הסביבה, הכל בהרצה אחת.
+
+**ידנית (אם צריך לעדכן משתנים אחרי שהמשימה כבר מותקנת, בלי להריץ את הסקריפט מחדש):**
+
 1. מורידים את `frpc.exe` הרשמי (לא מגיע בריפו - כמו ש-Playwright מוריד את ה-browser שלו בהתקנה, לא רוצים בינארי לא-שקוף שמורץ בהרשאות Admin מגיע מ-git):
    ```powershell
    .\scripts\get-frpc.ps1
    ```
-2. מגדירים משתני סביבה (למשל בתוך ה-Scheduled Task, או `.env` שנטען לפני ההרצה):
+2. מגדירים משתני סביבה **ברמת המערכת** (כדי שה-Scheduled Task יראה אותם - קובץ `.env` לא נטען אוטומטית, הקוד קורא ישירות מ-`process.env`):
+   ```powershell
+   [Environment]::SetEnvironmentVariable("TANY_DESKTOP_FRPS_ADDR", "<כתובת ה-frps ב-GCP>", "Machine")
+   [Environment]::SetEnvironmentVariable("TANY_DESKTOP_FRPS_PORT", "7000", "Machine")
+   [Environment]::SetEnvironmentVariable("TANY_DESKTOP_FRPS_TOKEN", "<טוקן משותף מול frps>", "Machine")
+   [Environment]::SetEnvironmentVariable("TANY_DESKTOP_FRP_REMOTE_PORT", "<פורט ייעודי למכשיר הזה על frps>", "Machine")
    ```
-   TANY_DESKTOP_FRPS_ADDR=<כתובת ה-frps ב-GCP>
-   TANY_DESKTOP_FRPS_PORT=7000
-   TANY_DESKTOP_FRPS_TOKEN=<טוקן משותף מול frps>
-   TANY_DESKTOP_FRP_REMOTE_PORT=<פורט ייעודי למכשיר הזה על frps>
-   TANY_CLOUD_REGISTER_URL=<כתובת בסיס ה-API של TANY, פעם שקיים>
-   ```
-3. מריצים כרגיל (`npm run dev:server` או השירות המותקן) - אם `TANY_DESKTOP_FRPS_ADDR` מוגדר, השרת יקים את הטאנל, ירשום את המכשיר, ויסנכרן שגרות אוטומטית (בדיקת שינוי כל דקה, מוגדר עם `TANY_DESKTOP_SYNC_INTERVAL_MS`). בלי המשתנים - מתנהג בדיוק כמו היום (מקומי בלבד, בלי שגיאות).
+   **חשוב:** תהליכים שכבר רצים (כולל ה-Scheduled Task) לא רואים משתנים חדשים אוטומטית - צריך `Stop-ScheduledTask`/`Start-ScheduledTask` אחרי ההגדרה כדי שהתהליך הבא ייקרא אותם.
+3. `TANY_CLOUD_REGISTER_URL=<כתובת בסיס ה-API של TANY, פעם שקיים>` (אותה שיטה) - אם `TANY_DESKTOP_FRPS_ADDR` מוגדר, השרת יקים את הטאנל, ירשום את המכשיר, ויסנכרן שגרות אוטומטית (בדיקת שינוי כל דקה, מוגדר עם `TANY_DESKTOP_SYNC_INTERVAL_MS`). בלי המשתנים - מתנהג בדיוק כמו היום (מקומי בלבד, בלי שגיאות).
 
 **עדיין לא ממומש:** בחירת remotePort דינמית (כרגע פורט קבוע לכל מכשיר, מוגדר ידנית - ראו את ההערה בקוד ב-`config.ts`), וחתימת HMAC נוספת מעבר ל-API key (נקודה פתוחה באפיון עצמו, סעיף 13.2).
 
