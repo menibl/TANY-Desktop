@@ -25,7 +25,8 @@ function resolvePlaywrightCli(): string {
 async function runCodegenSession(
   startUrl: string,
   scriptOutFile: string,
-  loadStateFile: string | undefined
+  loadStateFile: string | undefined,
+  channel?: "chrome"
 ): Promise<string> {
   const saveStateFile = path.join(os.tmpdir(), `tany-desktop-storage-${Date.now()}.json`);
 
@@ -45,6 +46,9 @@ async function runCodegenSession(
     if (loadStateFile && fs.existsSync(loadStateFile)) {
       args.push("--load-storage", loadStateFile);
     }
+    if (channel) {
+      args.push("--channel", channel);
+    }
     const child = spawn(process.execPath, args, {
       stdio: "inherit",
       // When called from the Electron GUI, process.execPath is electron.exe -
@@ -58,7 +62,14 @@ async function runCodegenSession(
       // with 0; treat any exit as "session ended" and let the caller check
       // whether the expected output files were actually produced.
       if (code === null) reject(new Error("playwright codegen terminated by signal"));
-      else resolve();
+      else if (code !== 0 && channel && !fs.existsSync(saveStateFile)) {
+        reject(
+          new Error(
+            `לא נמצא Google Chrome מותקן במחשב (נדרש עבור התחברות דרך Google/Microsoft). ` +
+              `יש להתקין Chrome מ-google.com/chrome ולנסות שוב.`
+          )
+        );
+      } else resolve();
     });
   });
 
@@ -107,19 +118,24 @@ export async function recordWebRoutine(
 
 /**
  * Google (and similar identity providers) actively reject sign-in attempts
- * from automated/WebDriver-controlled browsers as a security measure -
- * Playwright's codegen browser is always CDP-controlled, so a "Sign in with
- * Google" step recorded or replayed through it gets blocked outright,
- * regardless of whether a human is the one clicking. That's not something
- * this app can work around in the automated flow itself.
+ * from automated/WebDriver-controlled browsers as a security measure. This
+ * isn't specific to *recording* - any CDP-controlled browser gets flagged,
+ * whether Playwright is capturing actions or the user is just manually
+ * clicking around in a Playwright-launched window. So plain "don't record,
+ * just let them click" isn't enough on its own; the browser itself still
+ * needs to look less like automation. Launching the user's real installed
+ * Google Chrome (`--channel chrome`) instead of Playwright's bundled
+ * Chromium is the main lever available here and meaningfully reduces (does
+ * not guarantee removing) that detection - bundled Chromium is what gets
+ * flagged most aggressively.
  *
  * The practical fix: let the user complete that login manually, once, in
- * this same kind of browser window (still Playwright-launched, but with no
- * recording/replay happening - just a plain visible window), capture the
- * resulting session (cookies/localStorage) here, and reuse it for every
- * future recording and run of that routine (see recordWebRoutine's
- * `priorAuthState` and player.ts's `authState`) - so the automated parts
- * never touch the identity provider's sign-in screen at all.
+ * this real-Chrome window (no recording/replay happening - just a plain
+ * visible window), capture the resulting session (cookies/localStorage)
+ * here, and reuse it for every future recording and run of that routine
+ * (see recordWebRoutine's `priorAuthState` and player.ts's `authState`) -
+ * so the automated parts never touch the identity provider's sign-in
+ * screen at all.
  */
 export async function loginAndCaptureAuthState(
   startUrl: string,
@@ -129,7 +145,7 @@ export async function loginAndCaptureAuthState(
   const loadStateFile = priorAuthState ? writeTempState(priorAuthState) : undefined;
 
   try {
-    const saveStateFile = await runCodegenSession(startUrl, throwawayScript, loadStateFile);
+    const saveStateFile = await runCodegenSession(startUrl, throwawayScript, loadStateFile, "chrome");
     const authState = readAndDeleteTempState(saveStateFile);
     if (fs.existsSync(throwawayScript)) fs.unlinkSync(throwawayScript);
     return authState;
