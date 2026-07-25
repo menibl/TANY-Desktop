@@ -134,6 +134,19 @@ node packages/engine-web/test/parser.smoketest.js   # פרסור פלט codegen 
 node packages/engine-web/test/replay.smoketest.js   # הרצה, הזרקת credential, השהיית/המשך OTP, מעקב אחר שלב כשל
 ```
 
+### בדיקה אינטראקטיבית עם Claude כלקוח MCP
+
+הדרך הכי נוחה לבדוק את שרת ה-MCP ידנית - במקום `curl` - היא לחבר אותו ל-Claude Code (או Claude Desktop) כשרת MCP חיצוני, ולבקש מקלוד להריץ שגרות ישירות מתוך שיחה.
+
+1. ודאו שהשרת רץ (`npm run dev:server`, או "הפעל שירות" ב-GUI).
+2. קחו את ה-API Key מה-GUI (כפתור "הצג API Key" בפאנל המכשיר בצד שמאל).
+3. ב-Claude Code, מטרמינל (לא בתוך הריפו הזה - מכל מקום על המחשב):
+   ```powershell
+   claude mcp add --transport http tany-desktop http://127.0.0.1:8765/mcp --header "x-api-key: <ה-API Key>"
+   ```
+   (אם התחביר לא תואם לגרסה שמותקנת אצלכם - `claude mcp add --help` יראה את התחביר המדויק.)
+4. פתחו שיחת Claude Code חדשה ובקשו למשל: "אילו כלים יש לך מ-tany-desktop?" או "תריץ את השגרה rtn_xxx" - קלוד יקרא ל-`run_routine`/`submit_otp` ישירות מול השרת האמיתי.
+
 כמו כן שרת ה-MCP עצמו נבדק קצה-לקצה מול קריאות `tools/call` אמיתיות (`initialize` → `run_routine` → `awaiting_otp` → `submit_otp` → `success`), כולל דחיית קריאה ללא `x-api-key` תקין - התוצאות תואמות בדיוק לדוגמאות בסעיף 14 של מסמך האפיון.
 
 ## אבטחה (סעיף 8 באפיון)

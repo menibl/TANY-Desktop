@@ -105,6 +105,22 @@ async function refreshSidebar() {
 
   document.getElementById("device-name").textContent = device.deviceName;
   document.getElementById("device-id").textContent = device.deviceId;
+
+  const showKeyBtn = document.getElementById("show-api-key-btn");
+  const copyKeyBtn = document.getElementById("copy-api-key-btn");
+  const keyValueEl = document.getElementById("api-key-value");
+  showKeyBtn.onclick = () => {
+    keyValueEl.textContent = device.apiKey;
+    keyValueEl.style.display = "block";
+    showKeyBtn.style.display = "none";
+    copyKeyBtn.style.display = "inline-block";
+  };
+  copyKeyBtn.onclick = async () => {
+    await navigator.clipboard.writeText(device.apiKey);
+    copyKeyBtn.textContent = "הועתק!";
+    setTimeout(() => (copyKeyBtn.textContent = "העתק"), 1500);
+  };
+
   const statusBadge = document.getElementById("service-status");
   const toggleBtn = document.getElementById("service-toggle-btn");
   statusBadge.textContent = service.running ? `פעיל (:${service.port})` : "לא פעיל";
