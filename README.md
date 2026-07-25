@@ -132,6 +132,7 @@ cd scripts
 npm run build
 node packages/engine-web/test/parser.smoketest.js   # פרסור פלט codegen -> Step[]
 node packages/engine-web/test/replay.smoketest.js   # הרצה, הזרקת credential, השהיית/המשך OTP, מעקב אחר שלב כשל
+node packages/shared/test/matching.smoketest.js     # התאמת query -> routine_id, וזיהוי ניסוחים כפולים
 ```
 
 ### בדיקה אינטראקטיבית עם Claude כלקוח MCP
@@ -145,7 +146,7 @@ node packages/engine-web/test/replay.smoketest.js   # הרצה, הזרקת crede
    claude mcp add --transport http tany-desktop http://127.0.0.1:8765/mcp --header "x-api-key: <ה-API Key>"
    ```
    (אם התחביר לא תואם לגרסה שמותקנת אצלכם - `claude mcp add --help` יראה את התחביר המדויק.)
-4. פתחו שיחת Claude Code חדשה ובקשו למשל: "אילו כלים יש לך מ-tany-desktop?" או "תריץ את השגרה rtn_xxx" - קלוד יקרא ל-`run_routine`/`submit_otp` ישירות מול השרת האמיתי.
+4. פתחו שיחת Claude Code חדשה ובקשו בשפה חופשית, בדיוק כמו שמשתמש היה כותב בוואטסאפ - למשל "מה מצב העו\"ש שלי?" (כל עוד זה תואם/מכיל ניסוח שהגדרתם לשגרה). קלוד יקרא ל-`run_routine` עם `query` (לא `routine_id`), ו-TANY DESKTOP עצמו יתאים את זה לשגרה הנכונה - בדיוק ההתנהגות שתוארה למעלה ב"נקודות החלטה" (סעיף 5). אפשר גם לבקש "אילו כלים יש לך מ-tany-desktop?" כדי לראות את שני ה-tools.
 
 כמו כן שרת ה-MCP עצמו נבדק קצה-לקצה מול קריאות `tools/call` אמיתיות (`initialize` → `run_routine` → `awaiting_otp` → `submit_otp` → `success`), כולל דחיית קריאה ללא `x-api-key` תקין - התוצאות תואמות בדיוק לדוגמאות בסעיף 14 של מסמך האפיון.
 
@@ -162,6 +163,7 @@ node packages/engine-web/test/replay.smoketest.js   # הרצה, הזרקת crede
 2. **אוטומציית דסקטופ**: Power Automate Desktop קנייני ל-Windows בלבד ולא ניתן להריץ/לפתח מתוך sandbox של Linux - מומש כ-adapter (`RoutineEngine`) + מימוש stub שמחזיר כשל ברור, כדי שכל שאר המערכת (DB, MCP, GUI) כבר תומכת בסוג `desktop` ורק ה-body יוחלף כשיהיה Windows זמין.
 3. **ללא שרת TANY-cloud מדומה**: לא נבנה mock; הבדיקה קצה-לקצה בוצעה ישירות מול שרת ה-MCP האמיתי דרך קריאות `tools/call`.
 4. **הצפנה**: הצפנת שדות ברמת אפליקציה (AES-256-GCM) במקום SQLCipher, כדי להימנע ממודול native שביר בין פלטפורמות.
+5. **⚠️ סטייה ממסמך האפיון המקורי - התאמת ניסוחים עברה ל-TANY DESKTOP**: סעיף 20 באפיון תיאר ש-TANY שומר קאש מקומי של שגרות+triggers ומבצע את ההתאמה הסמנטית בעצמו, כדי לא לקרוא ל-MCP על כל הודעה נכנסת. **הוחלט לשנות**: `run_routine` מקבל עכשיו גם `query` (טקסט חופשי) בנוסף ל-`routine_id`, ו-TANY DESKTOP עצמו עושה את ההתאמה מול ה-triggers השמורים שלו (ראו `findRoutineByQuery` ב-`packages/shared/src/db.ts`) ומחזיר `status: "no_match"` אם שום דבר לא מתאים. `routines/sync` עדיין קיים ורץ, אבל כבר לא הכרחי להתאמה - רק אם TANY רוצה את רשימת השגרות לצרכים אחרים (הצגה למשתמש וכד'). כדי שההתאמה תישאר חד-משמעית, נוסף גם ולידציה שחוסמת שמירת שגרה עם ניסוח שכבר קיים בשגרה אחרת. פירוט מלא ב-`docs/TANY_INTEGRATION.md`.
 
 ## מפת דרכים ל-Phase 2 (חיבור בפועל ל-TANY)
 

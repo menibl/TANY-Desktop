@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   getRoutine,
+  findRoutineByQuery,
   getCredentialForRoutine,
   loadRoutineDefinition,
   loadAuthState,
@@ -29,6 +30,8 @@ function recordOutcome(runId: string, result: RunRoutineResult): void {
     finishRunLog(runId, "awaiting_otp");
   } else if (result.status === "success") {
     finishRunLog(runId, "success");
+  } else if (result.status === "no_match") {
+    finishRunLog(runId, "failed", { reason: "no_match", message: result.message });
   } else {
     finishRunLog(runId, "failed", {
       failedStep: result.failed_step,
@@ -50,26 +53,42 @@ export function buildMcpServer(): McpServer {
 
   server.tool(
     "run_routine",
-    "מריץ שגרה שמורה במחשב הלקוח ומחזיר תוצאה, בקשת OTP, או כשל.",
+    "מריץ שגרה שמורה במחשב הלקוח לפי routine_id ידוע, או לפי query בשפה חופשית שמותאם מול ניסוחי ההפעלה השמורים מקומית. מחזיר תוצאה, בקשת OTP, no_match, או כשל.",
     {
-      routine_id: z.string().describe("מזהה השגרה, למשל rtn_checking_balance"),
+      routine_id: z.string().optional().describe("מזהה שגרה ידוע במדויק, למשל rtn_checking_balance"),
+      query: z.string().optional().describe("ניסוח חופשי מהמשתמש, למשל 'מה מצב העו\"ש' - מותאם מול ה-triggers המקומיים אם routine_id לא סופק"),
       requested_by: z.string().optional().describe("whatsapp_user_id של המשתמש שביקש"),
     },
-    async ({ routine_id, requested_by }) => {
-      const routine = getRoutine(routine_id);
-      if (!routine) {
+    async ({ routine_id, query, requested_by }) => {
+      if (!routine_id && !query) {
         return toCallToolResult({
           status: "failed",
           failed_step: -1,
-          reason: "routine_not_found",
-          message: `שגרה '${routine_id}' לא נמצאה במאגר המקומי`,
+          reason: "invalid_arguments",
+          message: "יש לספק routine_id או query",
+        });
+      }
+
+      const routine = routine_id ? getRoutine(routine_id) : findRoutineByQuery(query!);
+      if (!routine) {
+        if (routine_id) {
+          return toCallToolResult({
+            status: "failed",
+            failed_step: -1,
+            reason: "routine_not_found",
+            message: `שגרה '${routine_id}' לא נמצאה במאגר המקומי`,
+          });
+        }
+        return toCallToolResult({
+          status: "no_match",
+          message: `לא נמצאה שגרה שמתאימה ל-"${query}"`,
         });
       }
 
       const definition = loadRoutineDefinition(routine.scriptRef);
-      const credential = getCredentialForRoutine(routine_id)?.payload;
-      const authState = loadAuthState(routine_id);
-      const runId = startRunLog(routine_id, requested_by);
+      const credential = getCredentialForRoutine(routine.routineId)?.payload;
+      const authState = loadAuthState(routine.routineId);
+      const runId = startRunLog(routine.routineId, requested_by);
 
       const engine = resolveEngine(routine.type);
       const result = await engine.run(definition, credential, requested_by, authState);

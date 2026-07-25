@@ -139,13 +139,33 @@ export interface RunFailedResult {
   message: string;
 }
 
+/**
+ * Returned when `run_routine` was called with a free-text `query` (not a
+ * known `routine_id`) and no local trigger matched it - distinct from
+ * "failed" because this isn't an error, it's a normal "I didn't recognize
+ * that" outcome TANY can reflect to the user or ask a follow-up about.
+ */
+export interface RunNoMatchResult {
+  status: "no_match";
+  message: string;
+}
+
 export type RunRoutineResult =
   | RunSuccessResult
   | RunAwaitingOtpResult
-  | RunFailedResult;
+  | RunFailedResult
+  | RunNoMatchResult;
 
 export interface RunRoutineArgs {
-  routine_id: string;
+  /** Exact known routine id. Provide this OR `query`, not neither. */
+  routine_id?: string;
+  /**
+   * Free-text phrase from the user (spec section 20 alternative: instead of
+   * TANY matching against a synced trigger cache, TANY DESKTOP matches
+   * against its own local RoutineTrigger table and returns `no_match` if
+   * nothing fits).
+   */
+  query?: string;
   requested_by?: string;
 }
 

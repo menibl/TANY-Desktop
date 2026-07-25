@@ -230,6 +230,9 @@ async function selectRoutine(routineId) {
       resultEl.innerHTML = `<div class="badge awaiting_otp">awaiting_otp</div><p>${escapeHtml(result.prompt_hint)}</p>`;
       otpForm.style.display = "flex";
       otpForm.dataset.token = result.continuation_token;
+    } else if (result.status === "no_match") {
+      resultEl.innerHTML = `<div class="badge failed">no_match</div><p>${escapeHtml(result.message)}</p>`;
+      otpForm.style.display = "none";
     } else {
       resultEl.innerHTML = `<div class="badge failed">failed</div><p>שלב ${result.failed_step}: ${escapeHtml(result.reason)} - ${escapeHtml(result.message)}</p>`;
       otpForm.style.display = "none";
@@ -345,7 +348,7 @@ function startNewRoutineFlow(opts = {}) {
     renderNewSteps(stepsReview);
   });
 
-  root.querySelector(".save-routine-btn").addEventListener("click", async () => {
+  root.querySelector(".save-routine-btn").addEventListener("click", async (e) => {
     const { steps, credential } = collectStepsAndCredential(stepsReview);
     const outputFields = steps.filter((s) => s.type === "extract" && s.extractAs).map((s) => s.extractAs);
     const name = nameInput.value.trim();
@@ -353,19 +356,26 @@ function startNewRoutineFlow(opts = {}) {
     if (!name) return alert("יש להזין שם לשגרה");
     if (triggers.length === 0) return alert("יש להזין לפחות ניסוח הפעלה אחד");
 
-    await window.tany.routines.save({
-      routineId: newRoutineState.routineId,
-      name,
-      type: newRoutineState.type,
-      startUrl: newRoutineState.startUrl,
-      steps,
-      outputFields,
-      triggers,
-      credential,
-    });
-    newRoutineState = null;
-    await refreshSidebar();
-    contentEl.innerHTML = "";
+    e.target.disabled = true;
+    try {
+      await window.tany.routines.save({
+        routineId: newRoutineState.routineId,
+        name,
+        type: newRoutineState.type,
+        startUrl: newRoutineState.startUrl,
+        steps,
+        outputFields,
+        triggers,
+        credential,
+      });
+      newRoutineState = null;
+      await refreshSidebar();
+      contentEl.innerHTML = "";
+    } catch (err) {
+      alert(err.message || String(err));
+    } finally {
+      e.target.disabled = false;
+    }
   });
 
   if (newRoutineState.editingRoutineId) {

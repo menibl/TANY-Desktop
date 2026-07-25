@@ -168,6 +168,55 @@ export function listAllTriggers(): RoutineTriggerRecord[] {
   return rows.map((r) => ({ routineId: r.routine_id, phrase: r.phrase }));
 }
 
+function normalizePhrase(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Free-text matching for run_routine's `query` argument. Deliberately
+ * simple (normalized bidirectional substring match, longest matching
+ * trigger wins if several routines qualify) rather than semantic/NLP
+ * matching - TANY DESKTOP has no LLM in the run-time path by design (spec
+ * section 1: replay is deterministic). Ambiguous ties resolve to whichever
+ * matching trigger is found first; not worth more sophistication until
+ * real usage shows it's needed.
+ */
+export function findRoutineByQuery(query: string): RoutineRecord | undefined {
+  const normalizedQuery = normalizePhrase(query);
+  if (!normalizedQuery) return undefined;
+
+  let best: { routineId: string; len: number } | undefined;
+  for (const t of listAllTriggers()) {
+    const normalizedPhrase = normalizePhrase(t.phrase);
+    if (!normalizedPhrase) continue;
+    if (normalizedQuery.includes(normalizedPhrase) || normalizedPhrase.includes(normalizedQuery)) {
+      if (!best || normalizedPhrase.length > best.len) {
+        best = { routineId: t.routineId, len: normalizedPhrase.length };
+      }
+    }
+  }
+  return best ? getRoutine(best.routineId) : undefined;
+}
+
+/**
+ * Duplicate-trigger guard (exact match, not the fuzzy matching above) - two
+ * routines sharing a trigger phrase would make findRoutineByQuery's result
+ * arbitrary, so this is enforced at save time instead.
+ */
+export function findRoutineByExactTrigger(
+  phrase: string,
+  excludingRoutineId?: string
+): RoutineRecord | undefined {
+  const normalizedPhrase = normalizePhrase(phrase);
+  for (const t of listAllTriggers()) {
+    if (t.routineId === excludingRoutineId) continue;
+    if (normalizePhrase(t.phrase) === normalizedPhrase) {
+      return getRoutine(t.routineId);
+    }
+  }
+  return undefined;
+}
+
 // ---- Credential ----
 
 export function saveCredential(routineId: string, payload: CredentialPayload): string {

@@ -17,6 +17,7 @@ import {
   loadAuthState,
   hasAuthState,
   deleteAuthState,
+  findRoutineByExactTrigger,
 } from "@tany-desktop/shared";
 import { generateRoutineId } from "@tany-desktop/shared";
 import type { RoutineDefinition, RoutineType, Step, RunRoutineResult } from "@tany-desktop/shared";
@@ -74,6 +75,17 @@ export function saveRoutine(input: SaveRoutineInput): string {
   // was ever saved (e.g. to tie a one-time login's auth state to it before
   // the routine has a name) - honor it even when there's no existing DB row.
   const routineId = existing?.routineId ?? input.routineId ?? generateRoutineId(input.name);
+
+  // Two routines sharing a trigger would make run_routine's free-text
+  // matching (findRoutineByQuery) pick between them arbitrarily - block it
+  // here instead of letting it happen silently at run time.
+  for (const phrase of input.triggers) {
+    const conflict = findRoutineByExactTrigger(phrase, routineId);
+    if (conflict) {
+      throw new Error(`הניסוח "${phrase}" כבר בשימוש בשגרה "${conflict.name}" - יש לבחור ניסוח אחר.`);
+    }
+  }
+
   const now = new Date().toISOString();
 
   const definition: RoutineDefinition = {
@@ -139,13 +151,18 @@ export async function submitOtp(continuationToken: string, otpCode: string): Pro
 }
 
 function logOutcome(runId: string, result: RunRoutineResult): void {
-  if (result.status === "awaiting_otp") tokenToRunId.set(result.continuation_token, runId);
-  if (result.status === "success") finishRunLog(runId, "success");
-  else if (result.status === "awaiting_otp") finishRunLog(runId, "awaiting_otp");
-  else
+  if (result.status === "awaiting_otp") {
+    tokenToRunId.set(result.continuation_token, runId);
+    finishRunLog(runId, "awaiting_otp");
+  } else if (result.status === "success") {
+    finishRunLog(runId, "success");
+  } else if (result.status === "no_match") {
+    finishRunLog(runId, "failed", { reason: "no_match", message: result.message });
+  } else {
     finishRunLog(runId, "failed", {
       failedStep: result.failed_step,
       reason: result.reason,
       message: result.message,
     });
+  }
 }
