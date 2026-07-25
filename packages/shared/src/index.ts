@@ -5,3 +5,4 @@ export * from "./crypto";
 export * from "./db";
 export * from "./device";
 export * from "./routineStorage";
+export * from "./authStateStorage";

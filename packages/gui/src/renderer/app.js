@@ -128,6 +128,28 @@ async function selectRoutine(routineId) {
     });
   });
 
+  const authStatusEl = root.querySelector(".auth-status");
+  authStatusEl.innerHTML = detail.hasAuthState
+    ? '<span class="badge online">מחובר</span>'
+    : "<span class='muted'>אין התחברות שמורה לשגרה זו</span>";
+
+  root.querySelector(".refresh-login-btn").addEventListener("click", async (e) => {
+    if (!detail.definition.startUrl) {
+      alert("לשגרה הזו אין כתובת התחלה שמורה");
+      return;
+    }
+    e.target.disabled = true;
+    authStatusEl.innerHTML = "<span class='muted'>נפתח חלון להתחברות...</span>";
+    try {
+      await window.tany.recording.login(routineId, detail.definition.startUrl);
+      authStatusEl.innerHTML = '<span class="badge online">מחובר</span>';
+    } catch (err) {
+      authStatusEl.innerHTML = `<span class="badge failed">שגיאה: ${escapeHtml(err.message || String(err))}</span>`;
+    } finally {
+      e.target.disabled = false;
+    }
+  });
+
   const resultSection = root.querySelector(".run-result-section");
   const resultEl = root.querySelector(".run-result");
   const otpForm = root.querySelector(".otp-form");
@@ -178,6 +200,10 @@ function startNewRoutineFlow(opts = {}) {
   activeRoutineId = null;
   newRoutineState = {
     editingRoutineId: opts.editingRoutineId ?? null,
+    // A stable id is needed before the routine is ever saved, so a one-time
+    // login done before recording and the recording session itself agree on
+    // where to store/load the saved auth state (see ipc.ts recording:login).
+    routineId: opts.editingRoutineId ?? `rtn_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`,
     type: opts.type ?? "web",
     startUrl: opts.startUrl ?? "",
     steps: [],
@@ -202,23 +228,45 @@ function startNewRoutineFlow(opts = {}) {
   startUrlInput.value = newRoutineState.startUrl;
 
   const recordingStatus = root.querySelector(".recording-status");
+  const loginStatus = root.querySelector(".login-status");
   const stepsReview = root.querySelector(".steps-review");
   const nameInput = root.querySelector(".new-name");
   const triggersInput = root.querySelector(".new-triggers");
   nameInput.value = newRoutineState.existingName;
   triggersInput.value = newRoutineState.existingTriggers.join(", ");
 
-  root.querySelector(".start-recording-btn").addEventListener("click", async (e) => {
+  function requireUrl() {
     const url = startUrlInput.value.trim();
     if (!url) {
       alert("יש להזין כתובת התחלה");
-      return;
+      return null;
     }
     newRoutineState.startUrl = url;
+    return url;
+  }
+
+  root.querySelector(".login-btn").addEventListener("click", async (e) => {
+    const url = requireUrl();
+    if (!url) return;
+    e.target.disabled = true;
+    loginStatus.textContent = "נפתח דפדפן להתחברות - התחברו ידנית ואז סגרו את החלון.";
+    try {
+      await window.tany.recording.login(newRoutineState.routineId, url);
+      loginStatus.textContent = "ההתחברות נשמרה. אפשר להמשיך להקלטה.";
+    } catch (err) {
+      loginStatus.textContent = `שגיאת התחברות: ${err.message || err}`;
+    } finally {
+      e.target.disabled = false;
+    }
+  });
+
+  root.querySelector(".start-recording-btn").addEventListener("click", async (e) => {
+    const url = requireUrl();
+    if (!url) return;
     e.target.disabled = true;
     recordingStatus.textContent = "מקליט... בצעו את התהליך בדפדפן שנפתח, ואז סגרו את חלון ההקלטה.";
     try {
-      const steps = await window.tany.recording.start(url);
+      const steps = await window.tany.recording.start(newRoutineState.routineId, url);
       newRoutineState.steps = steps;
       recordingStatus.textContent = `ההקלטה הסתיימה - נקלטו ${steps.length} שלבים.`;
       stepsReview.style.display = "block";
@@ -250,7 +298,7 @@ function startNewRoutineFlow(opts = {}) {
     if (triggers.length === 0) return alert("יש להזין לפחות ניסוח הפעלה אחד");
 
     await window.tany.routines.save({
-      routineId: newRoutineState.editingRoutineId || undefined,
+      routineId: newRoutineState.routineId,
       name,
       type: newRoutineState.type,
       startUrl: newRoutineState.startUrl,

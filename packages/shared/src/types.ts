@@ -2,6 +2,20 @@
 
 export type RoutineType = "web" | "desktop";
 
+/**
+ * A Playwright browser context's saved cookies + localStorage (its
+ * `storageState()` output). Sites that gate login behind an identity
+ * provider (e.g. "Sign in with Google") reject automated/WebDriver-flagged
+ * browsers outright, so the login itself can't be recorded/replayed like a
+ * normal step - instead the user logs in once, we persist the resulting
+ * session here (encrypted, same as Credential), and future recordings/runs
+ * start already-authenticated instead of hitting that block.
+ */
+export interface AuthState {
+  cookies: Array<Record<string, unknown>>;
+  origins: Array<Record<string, unknown>>;
+}
+
 export type StepType =
   | "goto"
   | "click"

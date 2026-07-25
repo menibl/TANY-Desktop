@@ -14,6 +14,9 @@ import {
   deleteRoutineDefinition,
   startRunLog,
   finishRunLog,
+  loadAuthState,
+  hasAuthState,
+  deleteAuthState,
 } from "@tany-desktop/shared";
 import { generateRoutineId } from "@tany-desktop/shared";
 import type { RoutineDefinition, RoutineType, Step, RunRoutineResult } from "@tany-desktop/shared";
@@ -50,6 +53,7 @@ export function getRoutineDetail(routineId: string) {
     triggers: getTriggers(routineId),
     credentialFields: credential ? Object.keys(credential.payload) : [],
     runLogs: listRunLogsForRoutine(routineId),
+    hasAuthState: hasAuthState(routineId),
   };
 }
 
@@ -66,7 +70,10 @@ export interface SaveRoutineInput {
 
 export function saveRoutine(input: SaveRoutineInput): string {
   const existing = input.routineId ? getRoutine(input.routineId) : undefined;
-  const routineId = existing?.routineId ?? generateRoutineId(input.name);
+  // input.routineId may be a draft id the GUI generated before the routine
+  // was ever saved (e.g. to tie a one-time login's auth state to it before
+  // the routine has a name) - honor it even when there's no existing DB row.
+  const routineId = existing?.routineId ?? input.routineId ?? generateRoutineId(input.name);
   const now = new Date().toISOString();
 
   const definition: RoutineDefinition = {
@@ -101,6 +108,7 @@ export function saveRoutine(input: SaveRoutineInput): string {
 export function deleteRoutine(routineId: string): void {
   const routine = getRoutine(routineId);
   if (routine) deleteRoutineDefinition(routine.scriptRef);
+  deleteAuthState(routineId);
   dbDeleteRoutine(routineId);
 }
 
@@ -114,9 +122,10 @@ export async function runRoutineNow(routineId: string): Promise<RunRoutineResult
   }
   const definition = loadRoutineDefinition(routine.scriptRef);
   const credential = getCredentialForRoutine(routineId)?.payload;
+  const authState = loadAuthState(routineId);
   const runId = startRunLog(routineId, "gui_manual_run");
   const engine = resolveEngine(routine.type);
-  const result = await engine.run(definition, credential, "gui_manual_run");
+  const result = await engine.run(definition, credential, "gui_manual_run", authState);
   logOutcome(runId, result);
   return result;
 }

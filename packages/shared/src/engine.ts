@@ -1,4 +1,4 @@
-import type { RoutineDefinition, RunRoutineResult, CredentialPayload } from "./types";
+import type { RoutineDefinition, RunRoutineResult, CredentialPayload, AuthState } from "./types";
 
 /**
  * Common contract both automation engines (web/Playwright, desktop/Power
@@ -12,7 +12,8 @@ export interface RoutineEngine {
   run(
     definition: RoutineDefinition,
     credential: CredentialPayload | undefined,
-    requestedBy?: string
+    requestedBy?: string,
+    authState?: AuthState
   ): Promise<RunRoutineResult>;
 
   /** Continue a run paused at otp_injection with the code the user supplied. */

@@ -5,6 +5,7 @@ import {
   getRoutine,
   getCredentialForRoutine,
   loadRoutineDefinition,
+  loadAuthState,
   startRunLog,
   finishRunLog,
   type RunRoutineResult,
@@ -67,10 +68,11 @@ export function buildMcpServer(): McpServer {
 
       const definition = loadRoutineDefinition(routine.scriptRef);
       const credential = getCredentialForRoutine(routine_id)?.payload;
+      const authState = loadAuthState(routine_id);
       const runId = startRunLog(routine_id, requested_by);
 
       const engine = resolveEngine(routine.type);
-      const result = await engine.run(definition, credential, requested_by);
+      const result = await engine.run(definition, credential, requested_by, authState);
       recordOutcome(runId, result);
       return toCallToolResult(result);
     }

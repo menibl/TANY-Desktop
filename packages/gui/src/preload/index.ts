@@ -15,7 +15,10 @@ const api = {
       ipcRenderer.invoke("routines:submitOtp", { continuationToken, otpCode }),
   },
   recording: {
-    start: (startUrl: string) => ipcRenderer.invoke("recording:start", startUrl),
+    start: (routineId: string, startUrl: string) =>
+      ipcRenderer.invoke("recording:start", { routineId, startUrl }),
+    login: (routineId: string, startUrl: string) =>
+      ipcRenderer.invoke("recording:login", { routineId, startUrl }),
   },
   service: {
     status: () => ipcRenderer.invoke("service:status"),

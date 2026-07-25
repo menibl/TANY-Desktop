@@ -5,6 +5,7 @@ import type {
   Step,
   RunRoutineResult,
   CredentialPayload,
+  AuthState,
 } from "@tany-desktop/shared";
 import { config } from "@tany-desktop/shared";
 
@@ -136,13 +137,20 @@ async function closeQuietly(browser: Browser): Promise<void> {
 export async function runWebRoutine(
   definition: RoutineDefinition,
   credential: CredentialPayload | undefined,
-  _requestedBy?: string
+  _requestedBy?: string,
+  authState?: AuthState
 ): Promise<RunRoutineResult> {
   const browser = await chromium.launch({
     headless: process.env.TANY_DESKTOP_HEADFUL !== "1",
     executablePath: process.env.TANY_DESKTOP_CHROMIUM_PATH || undefined,
   });
-  const context = await browser.newContext();
+  // Starting from a saved, already-authenticated session (see recorder.ts's
+  // loginAndCaptureAuthState) means replays never touch an identity
+  // provider's own sign-in screen, which would otherwise reject them as
+  // automated traffic.
+  const context = await browser.newContext(
+    authState ? { storageState: authState as any } : undefined
+  );
   const page = await context.newPage();
   const outputs: Record<string, unknown> = {};
 
