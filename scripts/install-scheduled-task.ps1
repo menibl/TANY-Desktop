@@ -69,19 +69,18 @@ $settings = New-ScheduledTaskSettingsSet `
   -RestartInterval (New-TimeSpan -Minutes 1) `
   -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
 
-$principal = New-ScheduledTaskPrincipal `
-  -UserId $credential.UserName `
-  -LogonType Password `
-  -RunLevel Highest
-
+# Note: -Principal (LogonType/RunLevel) and -User/-Password belong to two
+# different Register-ScheduledTask parameter sets and cannot be combined -
+# doing so throws "Parameter set cannot be resolved using the specified
+# named parameters." Pass the user/password/run level directly instead.
 Register-ScheduledTask `
   -TaskName $TaskName `
   -Action $action `
   -Trigger $trigger `
   -Settings $settings `
-  -Principal $principal `
   -User $credential.UserName `
   -Password $credential.GetNetworkCredential().Password `
+  -RunLevel Highest `
   -Force | Out-Null
 
 Write-Host "Installed. Starting it now..."
