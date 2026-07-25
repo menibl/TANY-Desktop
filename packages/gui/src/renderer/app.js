@@ -375,7 +375,11 @@ function renderNewSteps(container) {
         <input type="text" class="extract-selector" placeholder="CSS selector, למשל .balance" style="width:45%">
         <input type="text" class="extract-field" placeholder="שם שדה פלט, למשל balance" style="width:35%">
       `;
-    } else if (step.type === "fill") {
+      list.appendChild(li);
+      return;
+    }
+
+    if (step.type === "fill") {
       li.innerHTML = `
         <span class="step-badge">${STEP_LABELS.fill}</span> ${escapeHtml(describeSelector(step))}
         <select class="fill-mode">
@@ -393,6 +397,26 @@ function renderNewSteps(container) {
     } else {
       li.innerHTML = `<span class="step-badge">${STEP_LABELS[step.type] || step.type}</span> ${escapeHtml(describeSelector(step))}`;
     }
+
+    // Any step that targeted a specific element already carries a good
+    // selector Playwright generated during recording - reuse it instead of
+    // asking the user to write a CSS selector by hand (see .extract-selector
+    // above, still available as a manual fallback for elements they didn't
+    // click during recording).
+    if (step.selectorKind) {
+      const extractRow = document.createElement("div");
+      extractRow.innerHTML = `
+        <label><input type="checkbox" class="extract-toggle"> גם לחלץ נתון מכאן (למשל טקסט/מספר שמוצג באלמנט הזה)</label>
+        <input type="text" class="extract-field-name" placeholder="שם שדה פלט, למשל balance" style="display:none">
+      `;
+      const toggle = extractRow.querySelector(".extract-toggle");
+      const fieldInput = extractRow.querySelector(".extract-field-name");
+      toggle.addEventListener("change", () => {
+        fieldInput.style.display = toggle.checked ? "inline-block" : "none";
+      });
+      li.appendChild(extractRow);
+    }
+
     list.appendChild(li);
   });
 }
@@ -418,16 +442,33 @@ function collectStepsAndCredential(container) {
         credential[fieldName] = original.value ?? "";
         const { value, ...rest } = original;
         steps.push({ ...rest, index: steps.length, credentialField: fieldName });
-        return;
-      }
-      if (mode === "otp") {
+      } else if (mode === "otp") {
         const { value, ...rest } = original;
         steps.push({ ...rest, index: steps.length, type: "otp_injection", promptHint: "קוד אימות" });
-        return;
+      } else {
+        steps.push({ ...original, index: steps.length });
       }
+    } else {
+      steps.push({ ...original, index: steps.length });
     }
 
-    steps.push({ ...original, index: steps.length });
+    // A step the user clicked/targeted during recording already carries a
+    // good selector - reuse it for extraction instead of asking for a
+    // hand-written CSS selector (see the "extract" branch above for that
+    // manual fallback, still available via "+ הוסף שלב חילוץ נתונים").
+    const extractToggle = li.querySelector(".extract-toggle");
+    if (extractToggle && extractToggle.checked) {
+      const extractAs = li.querySelector(".extract-field-name").value.trim() || `field_${idx}`;
+      steps.push({
+        index: steps.length,
+        type: "extract",
+        selectorKind: original.selectorKind,
+        selector: original.selector,
+        role: original.role,
+        name: original.name,
+        extractAs,
+      });
+    }
   });
   return { steps, credential };
 }
