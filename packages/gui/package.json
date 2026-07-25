@@ -1,0 +1,21 @@
+{
+  "name": "@tany-desktop/gui",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "electron .",
+    "dev": "npm run build && electron ."
+  },
+  "dependencies": {
+    "@tany-desktop/engine-desktop": "*",
+    "@tany-desktop/engine-web": "*",
+    "@tany-desktop/shared": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.6",
+    "electron": "^33.2.1"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "tany-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TANY DESKTOP - local automation companion for TANY (WhatsApp AI assistant). Records and replays routines (web/desktop) and exposes an MCP server for TANY to trigger them.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @tany-desktop/shared && npm run build -w @tany-desktop/engine-web && npm run build -w @tany-desktop/engine-desktop && npm run build -w @tany-desktop/mcp-server && npm run build -w @tany-desktop/gui",
+    "typecheck": "npm run typecheck -w @tany-desktop/shared && npm run typecheck -w @tany-desktop/engine-web && npm run typecheck -w @tany-desktop/engine-desktop && npm run typecheck -w @tany-desktop/mcp-server && npm run typecheck -w @tany-desktop/gui",
+    "test": "npm run test --workspaces --if-present",
+    "dev:server": "npm run dev --workspace=@tany-desktop/mcp-server",
+    "dev:gui": "npm run dev --workspace=@tany-desktop/gui"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

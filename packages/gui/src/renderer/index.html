@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <title>TANY DESKTOP</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <h1>TANY DESKTOP</h1>
+        <button id="new-routine-btn" class="primary">+ שגרה חדשה</button>
+      </div>
+      <ul id="routine-list"></ul>
+      <div id="device-panel">
+        <div id="device-name">—</div>
+        <div id="device-id" class="muted"></div>
+        <div id="service-row">
+          <span id="service-status" class="badge">לא פעיל</span>
+          <button id="service-toggle-btn">הפעל שירות</button>
+        </div>
+      </div>
+    </aside>
+    <main id="content">
+      <div id="empty-state" class="panel">
+        <p>בחרו שגרה מהרשימה, או צרו שגרה חדשה.</p>
+      </div>
+    </main>
+  </div>
+
+  <template id="tpl-routine-detail">
+    <div class="panel">
+      <div class="panel-header">
+        <h2 class="r-name"></h2>
+        <div class="actions">
+          <button class="run-btn primary">הרץ עכשיו</button>
+          <button class="rerecord-btn">הקלטה מחדש</button>
+          <button class="delete-btn danger">מחק</button>
+        </div>
+      </div>
+      <section>
+        <h3>ניסוחי הפעלה (triggers)</h3>
+        <div class="triggers"></div>
+      </section>
+      <section>
+        <h3>שדות פלט</h3>
+        <div class="outputs"></div>
+      </section>
+      <section>
+        <h3>רצף פעולות מוקלט</h3>
+        <ol class="steps"></ol>
+      </section>
+      <section class="run-result-section" style="display:none">
+        <h3>תוצאת הרצה</h3>
+        <div class="run-result"></div>
+        <div class="otp-form" style="display:none">
+          <input type="text" class="otp-input" placeholder="קוד אימות (OTP)" />
+          <button class="otp-submit primary">שלח קוד</button>
+        </div>
+      </section>
+      <section>
+        <h3>היסטוריית הרצות</h3>
+        <table class="runlog-table">
+          <thead><tr><th>מתי</th><th>סטטוס</th><th>שלב כשל</th><th>סיבה</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+  </template>
+
+  <template id="tpl-new-routine">
+    <div class="panel">
+      <h2>שגרה חדשה</h2>
+      <section>
+        <label>סוג שגרה</label>
+        <select class="new-type">
+          <option value="web">אתר (דפדפן)</option>
+          <option value="desktop">תוכנת דסקטופ (Phase 2 - לא זמין עדיין)</option>
+        </select>
+      </section>
+      <section class="web-only">
+        <label>כתובת התחלה (URL)</label>
+        <input type="text" class="new-start-url" placeholder="https://example.com" />
+        <button class="start-recording-btn primary">התחל הקלטה</button>
+        <p class="hint">ייפתח דפדפן עם Playwright Inspector. בצעו את התהליך, ואז סגרו את חלון ההקלטה.</p>
+        <p class="recording-status muted"></p>
+      </section>
+      <section class="desktop-only" style="display:none">
+        <p class="hint">אוטומציית דסקטופ (Power Automate Desktop) עדיין לא מומשה במחשב זה - ראו packages/engine-desktop/README.md.</p>
+      </section>
+
+      <section class="steps-review" style="display:none">
+        <h3>שלבים שהוקלטו</h3>
+        <p class="hint">לכל שלב "מילוי" ניתן לסמן אם מדובר בסוד (סיסמה) או בשלב הזרקת OTP.</p>
+        <ol class="new-steps"></ol>
+        <button class="add-extract-btn">+ הוסף שלב חילוץ נתונים</button>
+
+        <label>שם השגרה</label>
+        <input type="text" class="new-name" placeholder='למשל: בדיקת מצב עו"ש' />
+
+        <label>ניסוחי הפעלה (מופרדים בפסיק)</label>
+        <input type="text" class="new-triggers" placeholder='מה מצב העו"ש, כמה כסף יש לי' />
+
+        <button class="save-routine-btn primary">שמור שגרה</button>
+      </section>
+    </div>
+  </template>
+
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+import {
+  listRoutines as dbListRoutines,
+  getRoutine,
+  deleteRoutine as dbDeleteRoutine,
+  upsertRoutine,
+  setTriggers,
+  getTriggers,
+  getLastRunForRoutine,
+  listRunLogsForRoutine,
+  getCredentialForRoutine,
+  replaceCredential,
+  saveRoutineDefinition,
+  loadRoutineDefinition,
+  deleteRoutineDefinition,
+  startRunLog,
+  finishRunLog,
+} from "@tany-desktop/shared";
+import { generateRoutineId } from "@tany-desktop/shared";
+import type { RoutineDefinition, RoutineType, Step, RunRoutineResult } from "@tany-desktop/shared";
+import { resolveEngine, webEngine } from "./engines";
+
+export interface RoutineListItem {
+  routineId: string;
+  name: string;
+  type: RoutineType;
+  updatedAt: string;
+  triggers: string[];
+  lastRun?: { status: string; startedAt: string; finishedAt?: string; failedStep?: number };
+}
+
+export function listRoutines(): RoutineListItem[] {
+  return dbListRoutines().map((r) => ({
+    routineId: r.routineId,
+    name: r.name,
+    type: r.type,
+    updatedAt: r.updatedAt,
+    triggers: getTriggers(r.routineId),
+    lastRun: getLastRunForRoutine(r.routineId),
+  }));
+}
+
+export function getRoutineDetail(routineId: string) {
+  const routine = getRoutine(routineId);
+  if (!routine) return undefined;
+  const definition = loadRoutineDefinition(routine.scriptRef);
+  const credential = getCredentialForRoutine(routineId);
+  return {
+    routine,
+    definition,
+    triggers: getTriggers(routineId),
+    credentialFields: credential ? Object.keys(credential.payload) : [],
+    runLogs: listRunLogsForRoutine(routineId),
+  };
+}
+
+export interface SaveRoutineInput {
+  routineId?: string;
+  name: string;
+  type: RoutineType;
+  startUrl?: string;
+  steps: Step[];
+  outputFields: string[];
+  triggers: string[];
+  credential?: Record<string, string>;
+}
+
+export function saveRoutine(input: SaveRoutineInput): string {
+  const existing = input.routineId ? getRoutine(input.routineId) : undefined;
+  const routineId = existing?.routineId ?? generateRoutineId(input.name);
+  const now = new Date().toISOString();
+
+  const definition: RoutineDefinition = {
+    routineId,
+    name: input.name,
+    type: input.type,
+    createdAt: existing
+      ? loadRoutineDefinition(existing.scriptRef).createdAt
+      : now,
+    updatedAt: now,
+    startUrl: input.startUrl,
+    steps: input.steps,
+    outputFields: input.outputFields,
+  };
+
+  const scriptRef = saveRoutineDefinition(definition);
+  upsertRoutine({
+    routineId,
+    name: input.name,
+    type: input.type,
+    createdAt: definition.createdAt,
+    updatedAt: now,
+    scriptRef,
+  });
+  setTriggers(routineId, input.triggers);
+  if (input.credential && Object.keys(input.credential).length > 0) {
+    replaceCredential(routineId, input.credential);
+  }
+  return routineId;
+}
+
+export function deleteRoutine(routineId: string): void {
+  const routine = getRoutine(routineId);
+  if (routine) deleteRoutineDefinition(routine.scriptRef);
+  dbDeleteRoutine(routineId);
+}
+
+// continuation_token -> the RunLog row started by the manual "Run Now" that paused on it.
+const tokenToRunId = new Map<string, string>();
+
+export async function runRoutineNow(routineId: string): Promise<RunRoutineResult> {
+  const routine = getRoutine(routineId);
+  if (!routine) {
+    return { status: "failed", failed_step: -1, reason: "routine_not_found", message: "שגרה לא נמצאה" };
+  }
+  const definition = loadRoutineDefinition(routine.scriptRef);
+  const credential = getCredentialForRoutine(routineId)?.payload;
+  const runId = startRunLog(routineId, "gui_manual_run");
+  const engine = resolveEngine(routine.type);
+  const result = await engine.run(definition, credential, "gui_manual_run");
+  logOutcome(runId, result);
+  return result;
+}
+
+export async function submitOtp(continuationToken: string, otpCode: string): Promise<RunRoutineResult> {
+  const runId = tokenToRunId.get(continuationToken);
+  tokenToRunId.delete(continuationToken);
+  const result = await webEngine.submitOtp(continuationToken, otpCode);
+  if (runId) logOutcome(runId, result);
+  return result;
+}
+
+function logOutcome(runId: string, result: RunRoutineResult): void {
+  if (result.status === "awaiting_otp") tokenToRunId.set(result.continuation_token, runId);
+  if (result.status === "success") finishRunLog(runId, "success");
+  else if (result.status === "awaiting_otp") finishRunLog(runId, "awaiting_otp");
+  else
+    finishRunLog(runId, "failed", {
+      failedStep: result.failed_step,
+      reason: result.reason,
+      message: result.message,
+    });
+}
