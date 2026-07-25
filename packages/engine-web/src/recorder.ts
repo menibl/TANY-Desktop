@@ -4,6 +4,17 @@ import * as os from "os";
 import * as path from "path";
 
 /**
+ * Resolves Playwright's CLI script path directly instead of shelling out to
+ * `npx`/`npx.cmd`: spawning a `.cmd` file on Windows without `shell: true`
+ * throws `EINVAL`, and `shell: true` would require shell-escaping `startUrl`
+ * to avoid injection. Invoking `node <cli.js> ...` directly sidesteps both.
+ */
+function resolvePlaywrightCli(): string {
+  const pkgJsonPath = require.resolve("playwright/package.json");
+  return path.join(path.dirname(pkgJsonPath), "cli.js");
+}
+
+/**
  * Recording (spec section 5) is done by shelling out to Playwright's own
  * `codegen` tool rather than reimplementing click/selector capture: it opens
  * a real browser window plus the Playwright Inspector, and as the user
@@ -20,11 +31,17 @@ export async function recordWebRoutine(startUrl: string): Promise<string> {
   const outFile = path.join(os.tmpdir(), `tany-desktop-codegen-${Date.now()}.js`);
 
   await new Promise<void>((resolve, reject) => {
-    const bin = process.platform === "win32" ? "npx.cmd" : "npx";
+    const cli = resolvePlaywrightCli();
     const child = spawn(
-      bin,
-      ["--no-install", "playwright", "codegen", startUrl, "--target", "javascript", "-o", outFile],
-      { stdio: "inherit" }
+      process.execPath,
+      [cli, "codegen", startUrl, "--target", "javascript", "-o", outFile],
+      {
+        stdio: "inherit",
+        // When called from the Electron GUI, process.execPath is electron.exe -
+        // ELECTRON_RUN_AS_NODE makes it run cli.js as plain Node instead of
+        // trying to launch it as another Electron app. No-op under plain node.
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      }
     );
     child.on("error", reject);
     child.on("close", (code) => {
