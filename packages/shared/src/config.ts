@@ -40,6 +40,12 @@ export function getRoutinesDir(): string {
   return path.join(ensureDataDir(), "routines");
 }
 
+export function getFrpcBinaryPath(): string {
+  const override = process.env.TANY_DESKTOP_FRPC_PATH;
+  if (override) return override;
+  return path.join(ensureDataDir(), "bin", process.platform === "win32" ? "frpc.exe" : "frpc");
+}
+
 export const config = {
   mcpServer: {
     host: process.env.TANY_DESKTOP_MCP_HOST || "127.0.0.1",
@@ -47,9 +53,30 @@ export const config = {
   },
   otpTimeoutMs: Number(process.env.TANY_DESKTOP_OTP_TIMEOUT_MS || 3 * 60 * 1000), // spec 14.2: ~3 minutes
   runTimeoutMs: Number(process.env.TANY_DESKTOP_RUN_TIMEOUT_MS || 60 * 1000),
-  // Phase 2 (not yet implemented, see README roadmap): TANY cloud pairing.
+  /**
+   * Embedded frpc tunnel (spec section 13.1). Simplest correct shape for now:
+   * one fixed TCP remotePort per device on frps, assigned out of band (env
+   * var) since TANY cloud has no dynamic-assignment endpoint yet. A
+   * subdomain/vhost-based scheme (one shared port for all customers) is a
+   * later enhancement once frps is actually deployed and that's needed.
+   */
+  tunnel: {
+    enabled: !!process.env.TANY_DESKTOP_FRPS_ADDR,
+    frpcBinaryPath: getFrpcBinaryPath(),
+    serverAddr: process.env.TANY_DESKTOP_FRPS_ADDR || "",
+    serverPort: Number(process.env.TANY_DESKTOP_FRPS_PORT || 7000),
+    authToken: process.env.TANY_DESKTOP_FRPS_TOKEN || "",
+    remotePort: Number(process.env.TANY_DESKTOP_FRP_REMOTE_PORT || 0),
+  },
+  // Phase 2 (see docs/TANY_INTEGRATION.md): TANY cloud pairing. registerUrl
+  // is the base API URL, e.g. https://api.tany.example - register/sync
+  // paths (spec section 19.1/20.1) are appended by pairing.ts.
   tanyCloud: {
-    enabled: false,
-    registerUrl: process.env.TANY_CLOUD_REGISTER_URL || "",
+    enabled: !!process.env.TANY_CLOUD_REGISTER_URL,
+    apiBaseUrl: (process.env.TANY_CLOUD_REGISTER_URL || "").replace(/\/$/, ""),
+    // If there's no tunnel but the machine already has a reachable public
+    // address (spec section 9's "dedicated always-on machine" scenario),
+    // this lets registration use it directly instead of frp.
+    publicMcpAddressOverride: process.env.TANY_DESKTOP_PUBLIC_MCP_ADDRESS || "",
   },
 };

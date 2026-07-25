@@ -3,13 +3,11 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { config, getOrCreateDevice } from "@tany-desktop/shared";
 import { buildMcpServer } from "./mcp";
 import { requireApiKey } from "./auth";
+import { startTunnel, stopTunnel } from "./tunnel";
+import { registerDevice, syncRoutinesIfChanged } from "./pairing";
 
 const device = getOrCreateDevice();
 console.log(`[tany-desktop] device_id=${device.deviceId} name="${device.deviceName}"`);
-console.log(
-  `[tany-desktop] Phase 2 TODO: pair this device with TANY cloud (spec section 13) - ` +
-    `not implemented yet, running local-only.`
-);
 
 const app = createMcpExpressApp({ host: config.mcpServer.host });
 
@@ -54,7 +52,56 @@ app.listen(config.mcpServer.port, config.mcpServer.host, () => {
     `[tany-desktop] MCP server listening on http://${config.mcpServer.host}:${config.mcpServer.port}/mcp`
   );
   console.log(`[tany-desktop] Health check: http://${config.mcpServer.host}:${config.mcpServer.port}/health`);
+  void connectToTanyCloud();
 });
 
-process.on("SIGINT", () => process.exit(0));
-process.on("SIGTERM", () => process.exit(0));
+/**
+ * Best-effort: the local server above is already fully usable (GUI, manual
+ * runs) regardless of whether this succeeds. Tunnel/pairing failures are
+ * logged, never fatal - matches the "runs local-only" fallback that was the
+ * only behavior before this existed.
+ */
+async function connectToTanyCloud(): Promise<void> {
+  let mcpAddress = config.tanyCloud.publicMcpAddressOverride;
+
+  if (!mcpAddress && config.tunnel.enabled) {
+    try {
+      mcpAddress = await startTunnel();
+      console.log(`[tany-desktop] tunnel up: ${mcpAddress}`);
+    } catch (err) {
+      console.error("[tany-desktop] failed to start tunnel:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  if (!mcpAddress) {
+    console.log(
+      "[tany-desktop] Phase 2: no tunnel/public address configured - pairing with TANY cloud (spec section 13) skipped, running local-only."
+    );
+    return;
+  }
+
+  try {
+    await registerDevice(mcpAddress);
+  } catch (err) {
+    console.error("[tany-desktop] device registration failed:", err instanceof Error ? err.message : err);
+  }
+
+  const syncOnce = () => {
+    syncRoutinesIfChanged().catch((err) =>
+      console.error("[tany-desktop] routine sync failed:", err instanceof Error ? err.message : err)
+    );
+  };
+  syncOnce();
+  const syncIntervalMs = Number(process.env.TANY_DESKTOP_SYNC_INTERVAL_MS || 60_000);
+  const syncInterval = setInterval(syncOnce, syncIntervalMs);
+  syncInterval.unref();
+}
+
+process.on("SIGINT", () => {
+  stopTunnel();
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  stopTunnel();
+  process.exit(0);
+});
