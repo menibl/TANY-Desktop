@@ -53,10 +53,21 @@ export function buildMcpServer(): McpServer {
 
   server.tool(
     "run_routine",
-    "מריץ שגרה שמורה במחשב הלקוח לפי routine_id ידוע, או לפי query בשפה חופשית שמותאם מול ניסוחי ההפעלה השמורים מקומית. מחזיר תוצאה, בקשת OTP, no_match, או כשל.",
+    "מריץ שגרה שמורה במחשב הלקוח לפי routine_id ידוע, או לפי query בשפה חופשית שמותאם מול ניסוחי ההפעלה השמורים מקומית. מחזיר תוצאה, בקשת OTP, no_match, או כשל. " +
+      "אין tool נפרד לרשימת שגרות זמינות - אין דרך לדעת מראש אילו routine_id קיימים. אלא אם routine_id מדויק כבר ידוע ממקור אמין (למשל הוחזר בתוצאה של קריאה קודמת ל-run_routine או ל-submit_otp), יש להעביר תמיד query עם הניסוח המקורי של המשתמש כלשונו. לעולם אין לנחש, להמציא, לתרגם או לקצר routine_id - ניחוש יגרום לכשל routine_not_found.",
     {
-      routine_id: z.string().optional().describe("מזהה שגרה ידוע במדויק, למשל rtn_checking_balance"),
-      query: z.string().optional().describe("ניסוח חופשי מהמשתמש, למשל 'מה מצב העו\"ש' - מותאם מול ה-triggers המקומיים אם routine_id לא סופק"),
+      routine_id: z
+        .string()
+        .optional()
+        .describe(
+          "מזהה שגרה מדויק - יש להעביר רק אם הוא כבר ידוע בוודאות ממקור אמין (למשל הוחזר בעבר מ-run_routine או מרשימה מוסמכת אחרת). אסור בהחלט לנחש, להמציא או לשחזר ממורח את השם (למשל 'rtn_expenses_super') - ניחוש שגוי תמיד ייכשל. אם אין ודאות כזו, יש להשאיר שדה זה ריק ולהעביר query במקום."
+        ),
+      query: z
+        .string()
+        .optional()
+        .describe(
+          "ברירת המחדל כש-routine_id אינו ידוע ממקור אמין: הניסוח המקורי והמלא של המשתמש כפי שנכתב, בלי לתרגם, לקצר, לנרמל או לנחש מזהה טכני מתוכו. לדוגמה 'מה מצב העו\"ש' - מותאם מול ה-triggers המקומיים בצד הלקוח."
+        ),
       requested_by: z.string().optional().describe("whatsapp_user_id של המשתמש שביקש"),
     },
     async ({ routine_id, query, requested_by }) => {
