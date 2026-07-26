@@ -8,7 +8,7 @@
 |---|---|---|
 | שרת MCP (`run_routine`, `submit_otp`, `/health`) | ✅ עובד, נבדק קצה-לקצה | `packages/mcp-server` |
 | מנוע הקלטה/הרצה - אתרים (Playwright) | ✅ עובד | `packages/engine-web` |
-| מנוע הקלטה/הרצה - דסקטופ (Power Automate Desktop) | 🚧 stub בלבד - ראו הסבר למטה | `packages/engine-desktop` |
+| מנוע הקלטה/הרצה - דסקטופ (Windows UI Automation) | 🚧 ממומש (הקלטה + הרצה + OTP), **לא נבדק על מחשב Windows אמיתי** - ראו `packages/engine-desktop/README.md` | `packages/engine-desktop` |
 | מאגר שגרות מוצפן מקומי (SQLite + הצפנת שדות) | ✅ עובד | `packages/shared` |
 | GUI מקומי (הקלטה, רשימה, דיבאג) | ✅ עובד (Electron) | `packages/gui` |
 | Auto-start (Windows Scheduled Task, "run whether logged on or not") | ✅ סקריפט התקנה | `scripts/` |
@@ -22,7 +22,7 @@
 packages/
   shared/           טיפוסים, DB מוצפן (better-sqlite3 + AES-256-GCM לשדות רגישים), זהות מכשיר
   engine-web/        הקלטה (playwright codegen) + פרסור ל-Step[] + מנוע הרצה עם תמיכה ב-OTP
-  engine-desktop/     ממשק RoutineEngine + מימוש stub (ל-Power Automate Desktop, Phase 2)
+  engine-desktop/     הקלטה/הרצה לתוכנות דסקטופ דרך Windows UI Automation (לא נבדק על Windows אמיתי - ראו README של החבילה)
   mcp-server/         שרת MCP (@modelcontextprotocol/sdk) על HTTP, run_routine + submit_otp + health
   gui/                אפליקציית Electron: רשימת שגרות, אשף הקלטה, מסך דיבאג, הגדרות מכשיר
 scripts/
@@ -108,7 +108,7 @@ cd scripts
 - **מעניק את ההרשאה "Log on as a batch job"** (`SeBatchLogonRight`) לחשבון שבחרתם - בלעדיה הרישום מצליח אבל כל הפעלה נכשלת בשקט ב-logon (Win32 1385), וה-Task אף פעם לא באמת עולה.
 - **מעניק הרשאת Full Control** על תיקיית הנתונים (`%ProgramData%\TanyDesktop`) לאותו חשבון - נדרש אם ה-Task רץ תחת חשבון שונה ממי שהריץ את ה-GUI לראשונה.
 
-**הערה חשובה על אוטומציית UI במסך נעול:** גם Playwright (במצב headed) וגם - כשיתווסף - Power Automate Desktop דורשים session גרפי אינטראקטיבי אמיתי כדי להריץ אוטומציה שדורשת חלון גלוי. תהליך שרץ ללא משתמש מחובר כלל לא רואה שולחן עבודה. לכן, בדיוק כפי שהאפיון מציין ("תרחיש נתמך: מחשב ייעודי שנשאר דלוק/פתוח"), התרחיש הנתמך בפועל הוא מחשב ייעודי שנשאר דלוק ומחובר. שגרות Playwright שרצות ב-headless (ברירת המחדל שלנו) לא מושפעות ממגבלה זו.
+**הערה חשובה על אוטומציית UI במסך נעול:** גם Playwright (במצב headed) וגם מנוע הדסקטופ (Windows UI Automation, `packages/engine-desktop`) דורשים session גרפי אינטראקטיבי אמיתי כדי להריץ אוטומציה שדורשת חלון גלוי. תהליך שרץ ללא משתמש מחובר כלל לא רואה שולחן עבודה. לכן, בדיוק כפי שהאפיון מציין ("תרחיש נתמך: מחשב ייעודי שנשאר דלוק/פתוח"), התרחיש הנתמך בפועל הוא מחשב ייעודי שנשאר דלוק ומחובר. שגרות Playwright שרצות ב-headless (ברירת המחדל שלנו) לא מושפעות ממגבלה זו.
 
 ### חיבור מרחוק - טאנל (frpc) + רישום + סנכרון מול TANY (סעיף 13 באפיון)
 
@@ -174,7 +174,7 @@ node packages/shared/test/matching.smoketest.js     # התאמת query -> routin
 ## נקודות החלטה שהתקבלו לפני המימוש
 
 1. **היקף**: תוכנה אמיתית שנועדה לרוץ על Windows (לא שלד/מוק) - הקלטה והרצה בפועל, ורק לאחר בדיקה מקומית מחוברים ל-TANY בענן.
-2. **אוטומציית דסקטופ**: Power Automate Desktop קנייני ל-Windows בלבד ולא ניתן להריץ/לפתח מתוך sandbox של Linux - מומש כ-adapter (`RoutineEngine`) + מימוש stub שמחזיר כשל ברור, כדי שכל שאר המערכת (DB, MCP, GUI) כבר תומכת בסוג `desktop` ורק ה-body יוחלף כשיהיה Windows זמין.
+2. **אוטומציית דסקטופ**: Power Automate Desktop (ההצעה המקורית באפיון) הוא קנייני-סגור בלי שום API הפעלה שקטה/הקלטה תכנותית - הוחלף ב-Windows UI Automation (דרך סקריפטי PowerShell, `packages/engine-desktop/native/`), ששומר על אותו עיקרון "לזהות אלמנטים, לא פיקסלים" מסעיף 2 באפיון. ממומש (הקלטה + הרצה + OTP) אבל **לא ניתן להריץ/לבדוק מתוך sandbox של Linux** - דורש בדיקה על Windows אמיתי, ראו `packages/engine-desktop/README.md`.
 3. **ללא שרת TANY-cloud מדומה**: לא נבנה mock; הבדיקה קצה-לקצה בוצעה ישירות מול שרת ה-MCP האמיתי דרך קריאות `tools/call`.
 4. **הצפנה**: הצפנת שדות ברמת אפליקציה (AES-256-GCM) במקום SQLCipher, כדי להימנע ממודול native שביר בין פלטפורמות.
 5. **⚠️ סטייה ממסמך האפיון המקורי - התאמת ניסוחים עברה ל-TANY DESKTOP**: סעיף 20 באפיון תיאר ש-TANY שומר קאש מקומי של שגרות+triggers ומבצע את ההתאמה הסמנטית בעצמו, כדי לא לקרוא ל-MCP על כל הודעה נכנסת. **הוחלט לשנות**: `run_routine` מקבל עכשיו גם `query` (טקסט חופשי) בנוסף ל-`routine_id`, ו-TANY DESKTOP עצמו עושה את ההתאמה מול ה-triggers השמורים שלו (ראו `findRoutineByQuery` ב-`packages/shared/src/db.ts`) ומחזיר `status: "no_match"` אם שום דבר לא מתאים. `routines/sync` עדיין קיים ורץ, אבל כבר לא הכרחי להתאמה - רק אם TANY רוצה את רשימת השגרות לצרכים אחרים (הצגה למשתמש וכד'). כדי שההתאמה תישאר חד-משמעית, נוסף גם ולידציה שחוסמת שמירת שגרה עם ניסוח שכבר קיים בשגרה אחרת. פירוט מלא ב-`docs/TANY_INTEGRATION.md`.
@@ -190,7 +190,7 @@ node packages/shared/test/matching.smoketest.js     # התאמת query -> routin
 3. ~~**סנכרון שגרות**~~ - **✅ מומש ונבדק** - שולח `POST /v1/devices/{device_id}/routines/sync` באתחול ובכל שינוי שזוהה (בדיקה מחזורית, לא event-driven בין תהליכים - ראו הערה ב-`pairing.ts`).
 4. **Health polling** מצד TANY מול `GET /health` (כבר קיים וזמין - סעיף 22).
 5. **צד TANY עצמו** (חלק ג', לא בריפו הזה, לא מומש): טבלת Device Registry, קאש שגרות, MCP client גנרי - ראו סעיפים 19-23 במסמך האפיון ו-`docs/TANY_INTEGRATION.md`.
-6. **Power Automate Desktop**: מימוש אמיתי במקום ה-stub (ראו `packages/engine-desktop/README.md`) - לא מומש.
+6. ~~**Power Automate Desktop**~~ - **הוחלף ב-UI Automation, ממומש** (ראו `packages/engine-desktop/README.md`) - **עדיין לא נבדק על Windows אמיתי**.
 7. **חתימת HMAC** נוספת מעבר ל-API key לכל בקשה - הוחלט "טרם הוגדר" באפיון (סעיף 13.2) - לא מומש.
 8. **remotePort דינמי**: כרגע כל מכשיר צריך פורט קבוע שמוגדר ידנית מראש (`TANY_DESKTOP_FRP_REMOTE_PORT`) - אין עדיין מנגנון שמקצה פורט/subdomain אוטומטית מצד TANY בזמן הרישום.
 

@@ -24,7 +24,8 @@ export type StepType =
   | "select"
   | "waitForSelector"
   | "extract"
-  | "otp_injection";
+  | "otp_injection"
+  | "launch";
 
 export type SelectorKind =
   | "role"
@@ -34,7 +35,33 @@ export type SelectorKind =
   | "testId"
   | "placeholder"
   | "altText"
-  | "title";
+  | "title"
+  | "uia";
+
+/**
+ * A desktop-app element selector (spec section 4's desktop engine), captured
+ * via Windows UI Automation instead of a browser DOM selector. Mirrors the
+ * "identify elements, not pixels" principle from engine-web: `automationId`
+ * is preferred when the app sets one (most reliable, survives window
+ * resize/theme/DPI changes); `name`+`controlType`(+`className`) are the
+ * fallback for apps that don't. `ancestor` disambiguates when multiple
+ * elements share the same name/controlType (e.g. several toolbar buttons),
+ * by additionally requiring a matching parent - kept shallow (one level)
+ * since deep chains get brittle fast, same trade-off `role`+`name` makes
+ * for web instead of a full CSS path. Serialized as the JSON string stored
+ * in `Step.selector` when `selectorKind === "uia"`.
+ */
+export interface UiaSelector {
+  automationId?: string;
+  name?: string;
+  controlType?: string;
+  className?: string;
+  ancestor?: {
+    automationId?: string;
+    name?: string;
+    controlType?: string;
+  };
+}
 
 /**
  * A single recorded action. `value` is a literal for plain fill/press steps.
@@ -48,12 +75,14 @@ export interface Step {
   index: number;
   type: StepType;
   selectorKind?: SelectorKind;
+  /** For selectorKind "uia": a JSON-serialized UiaSelector, not a raw string selector. */
   selector?: string;
   role?: string;
   name?: string;
   value?: string;
   credentialField?: string;
   key?: string;
+  /** For "goto": the URL to open. For "launch" (desktop): the .exe path to start. */
   url?: string;
   /** For "extract" steps: the output field name this step's text populates. */
   extractAs?: string;
@@ -67,6 +96,7 @@ export interface RoutineDefinition {
   type: RoutineType;
   createdAt: string;
   updatedAt: string;
+  /** For type "web": the start URL. For type "desktop": the target app's .exe path. */
   startUrl?: string;
   steps: Step[];
   /** Names of output fields the routine promises to return on success. */

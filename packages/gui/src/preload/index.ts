@@ -17,10 +17,14 @@ const api = {
   recording: {
     start: (routineId: string, startUrl: string) =>
       ipcRenderer.invoke("recording:start", { routineId, startUrl }),
+    startDesktop: (exePath: string) => ipcRenderer.invoke("recording:startDesktop", { exePath }),
     loginStart: (routineId: string, startUrl: string) =>
       ipcRenderer.invoke("recording:loginStart", { routineId, startUrl }),
     loginFinish: (routineId: string) => ipcRenderer.invoke("recording:loginFinish", routineId),
     loginCancel: (routineId: string) => ipcRenderer.invoke("recording:loginCancel", routineId),
+  },
+  dialog: {
+    pickExe: () => ipcRenderer.invoke("dialog:pickExe") as Promise<string | null>,
   },
   service: {
     status: () => ipcRenderer.invoke("service:status"),
