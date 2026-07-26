@@ -1,42 +1,37 @@
-import { spawn, type ChildProcess } from "child_process";
-import * as path from "path";
 import { config } from "@tany-desktop/shared";
+import { startMcpServer, type McpServerHandle } from "@tany-desktop/mcp-server";
 
 /**
- * Lets the GUI start/stop the local MCP server (packages/mcp-server) as a
- * child process for testing, without needing it installed as a Windows
- * Scheduled Task yet (see scripts/install-scheduled-task.ps1 for the real
- * always-on deployment - spec section 9).
+ * Lets the GUI start/stop the MCP server from a button ("הפעל שירות").
+ * Runs it *in-process* (same Electron main process, same native module
+ * build) rather than spawning a separate node.exe child - that's what the
+ * old design did, and it's exactly why the GUI and a standalone server
+ * process needed different better-sqlite3 builds (Electron ABI vs Node
+ * ABI) and couldn't run at the same time without a rebuild in between.
+ * One process now serves both the GUI windows and (once started) the MCP
+ * HTTP endpoint, so there's nothing to keep in sync.
  */
-let child: ChildProcess | undefined;
+let handle: McpServerHandle | undefined;
+let starting: Promise<McpServerHandle> | undefined;
 
 export function getServiceStatus(): { running: boolean; port: number } {
-  return { running: !!child && !child.killed, port: config.mcpServer.port };
+  return { running: !!handle, port: config.mcpServer.port };
 }
 
-export function startService(): { running: boolean; port: number } {
-  if (child && !child.killed) return getServiceStatus();
-
-  const entry = path.join(__dirname, "..", "..", "..", "mcp-server", "dist", "index.js");
-  child = spawn(process.execPath, [entry], {
-    stdio: "inherit",
-    // Run the Electron binary as plain Node (ELECTRON_RUN_AS_NODE) instead of
-    // spawning a second Electron app, and - just as importantly - so this
-    // child process loads native modules (better-sqlite3) with the same ABI
-    // that `electron-rebuild` (see package.json postinstall) built them for.
-    // A plain system `node` process here would mismatch that ABI.
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-  });
-  child.on("exit", () => {
-    child = undefined;
-  });
+export async function startService(): Promise<{ running: boolean; port: number }> {
+  if (!handle) {
+    starting ??= startMcpServer().finally(() => {
+      starting = undefined;
+    });
+    handle = await starting;
+  }
   return getServiceStatus();
 }
 
-export function stopService(): { running: boolean; port: number } {
-  if (child && !child.killed) {
-    child.kill();
-    child = undefined;
+export async function stopService(): Promise<{ running: boolean; port: number }> {
+  if (handle) {
+    await handle.stop();
+    handle = undefined;
   }
   return getServiceStatus();
 }

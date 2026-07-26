@@ -2,7 +2,8 @@
   "name": "@tany-desktop/mcp-server",
   "version": "0.1.0",
   "private": true,
-  "main": "dist/index.js",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
   "bin": {
     "tany-desktop-server": "dist/index.js"
   },
