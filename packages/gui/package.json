@@ -13,6 +13,7 @@
   "dependencies": {
     "@tany-desktop/engine-desktop": "*",
     "@tany-desktop/engine-web": "*",
+    "@tany-desktop/mcp-server": "*",
     "@tany-desktop/shared": "*"
   },
   "devDependencies": {
