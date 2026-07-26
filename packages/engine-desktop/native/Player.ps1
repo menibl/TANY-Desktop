@@ -283,5 +283,10 @@ try {
   $result = @{ status = "failed"; failed_step = -1; reason = "automation_error"; message = "$_" }
 }
 
-($result | ConvertTo-Json -Depth 10) | Set-Content -Path $OutputFile -Encoding UTF8
+# Set-Content -Encoding UTF8 always prepends a BOM on Windows PowerShell
+# 5.1 (unlike PowerShell 7+) - Node's JSON.parse doesn't strip a leading
+# BOM character and throws "Unexpected token" on it. Write BOM-less UTF-8
+# explicitly instead (see Recorder.ps1's matching fix).
+$resultJson = $result | ConvertTo-Json -Depth 10
+[System.IO.File]::WriteAllText($OutputFile, $resultJson, (New-Object System.Text.UTF8Encoding($false)))
 Write-Host "[player] done: $($result.status)"

@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import type { Step } from "@tany-desktop/shared";
+import { readJsonFileFromPowerShell } from "./psJson";
 
 function recorderScriptPath(): string {
   return path.join(__dirname, "..", "native", "Recorder.ps1");
@@ -49,7 +50,7 @@ export async function recordDesktopRoutine(exePath: string): Promise<Step[]> {
   if (!fs.existsSync(outFile)) {
     throw new Error("לא נוצר קובץ הקלטה - כנראה שההקלטה נסגרה לפני שבוצעה פעולה כלשהי.");
   }
-  const steps = JSON.parse(fs.readFileSync(outFile, "utf8")) as Step[];
+  const steps = readJsonFileFromPowerShell<Step[]>(outFile);
   fs.unlinkSync(outFile);
   return steps;
 }

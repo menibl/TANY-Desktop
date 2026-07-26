@@ -5,6 +5,7 @@ import * as path from "path";
 import { v4 as uuidv4 } from "uuid";
 import type { RoutineDefinition, RunRoutineResult, CredentialPayload } from "@tany-desktop/shared";
 import { config } from "@tany-desktop/shared";
+import { readJsonFileFromPowerShell } from "./psJson";
 
 /**
  * Runs paused on otp_injection, keyed by continuation_token (spec 14.2).
@@ -77,7 +78,7 @@ function runPlayerProcess(
           reject(new Error("Player.ps1 exited without producing a result file"));
           return;
         }
-        resolve(JSON.parse(fs.readFileSync(outputFile, "utf8")) as PlayerOutcome);
+        resolve(readJsonFileFromPowerShell<PlayerOutcome>(outputFile));
       } catch (err) {
         reject(err);
       } finally {
