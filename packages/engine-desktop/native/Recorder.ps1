@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Records a desktop-app routine via Windows UI Automation, mirroring
   engine-web's Playwright-codegen recorder but for native Win32/WPF/WinForms

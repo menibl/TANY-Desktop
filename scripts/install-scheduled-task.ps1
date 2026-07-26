@@ -34,6 +34,16 @@
     runs as a different Windows account than whoever first ran the GUI/an
     earlier manual test - that account owns the files there (DB, master
     key, frpc config) and a different account is denied access to them.
+  - Points Playwright at a shared browser install under the data directory
+    (PLAYWRIGHT_BROWSERS_PATH), rather than the default per-user cache
+    under %LOCALAPPDATA%. Playwright's browser download is tied to
+    whichever Windows account ran `npx playwright install chromium` - if
+    that was done as the interactive user (e.g. via the GUI) and the task
+    runs as a different account, web routines fail with "Playwright not
+    installed" even though it clearly was, just for a different account.
+    A shared location under the data directory (which the task's account
+    already has Full Control over, from the point above) fixes that for
+    any account without needing a duplicate download per account.
 
   NOTE (see spec section 9's "תרחיש נתמך"): UI automation - both Playwright
   (headed mode) and, once implemented, Power Automate Desktop - needs an
@@ -155,6 +165,27 @@ if ($secpolContent -match "^\s*SeBatchLogonRight\s*=") {
 $secpolContent | Set-Content $secpolPath -Encoding Unicode
 & secedit /configure /db $secdbPath /cfg $secpolPath /areas USER_RIGHTS | Out-Null
 Remove-Item $secpolPath, $secdbPath -ErrorAction SilentlyContinue
+
+# ---- Shared Playwright browser location (see doc comment above for why:
+# a per-user cache under %LOCALAPPDATA% means "Playwright not installed"
+# errors for the task's account even when it works fine interactively). ----
+$playwrightBrowsersPath = Join-Path $dataDir "ms-playwright"
+Write-Host "Setting PLAYWRIGHT_BROWSERS_PATH to $playwrightBrowsersPath (machine-wide)..."
+[Environment]::SetEnvironmentVariable("PLAYWRIGHT_BROWSERS_PATH", $playwrightBrowsersPath, "Machine")
+$env:PLAYWRIGHT_BROWSERS_PATH = $playwrightBrowsersPath
+if (-not (Test-Path (Join-Path $playwrightBrowsersPath "chromium-*"))) {
+  Write-Host "Installing the Playwright Chromium browser into the shared location..."
+  Push-Location $RepoPath
+  try {
+    & npx playwright install chromium
+  } finally {
+    Pop-Location
+  }
+}
+# New folder under $dataDir - relies on the icacls grant above having been
+# applied with (OI)(CI) (object/container inherit), which NTFS applies
+# automatically to anything created under $dataDir afterward, including
+# this one, without needing to re-run icacls here.
 
 # ---- Optional frpc tunnel wiring ----
 if ($FrpsAddr) {

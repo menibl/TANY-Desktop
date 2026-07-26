@@ -119,6 +119,16 @@ async function refreshSidebar() {
   document.getElementById("device-name").textContent = device.deviceName;
   document.getElementById("device-id").textContent = device.deviceId;
 
+  document.getElementById("rename-device-btn").onclick = async () => {
+    // Lets you tell multiple TANY DESKTOP machines apart (e.g. "מחשב המשרד"
+    // vs "מחשב הבית") when running routines from several of them.
+    const name = prompt("שם חדש למחשב הזה:", device.deviceName);
+    if (name && name.trim()) {
+      await window.tany.device.rename(name.trim());
+      refreshSidebar();
+    }
+  };
+
   const showKeyBtn = document.getElementById("show-api-key-btn");
   const copyKeyBtn = document.getElementById("copy-api-key-btn");
   const keyValueEl = document.getElementById("api-key-value");
