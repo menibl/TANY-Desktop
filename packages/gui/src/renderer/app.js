@@ -144,6 +144,19 @@ async function refreshSidebar() {
     setTimeout(() => (copyKeyBtn.textContent = "העתק"), 1500);
   };
 
+  const copyConnectBtn = document.getElementById("copy-connect-info-btn");
+  copyConnectBtn.onclick = async () => {
+    const text = [
+      `device_id: ${device.deviceId}`,
+      `device_name: ${device.deviceName}`,
+      `mcp_address: ${device.mcpAddress}`,
+      `api_key: ${device.apiKey}`,
+    ].join("\n");
+    await navigator.clipboard.writeText(text);
+    copyConnectBtn.textContent = "הועתק!";
+    setTimeout(() => (copyConnectBtn.textContent = "העתק פרטי חיבור ל-TANY"), 1500);
+  };
+
   const statusBadge = document.getElementById("service-status");
   const toggleBtn = document.getElementById("service-toggle-btn");
   statusBadge.textContent = service.running ? `פעיל (:${service.port})` : "לא פעיל";
