@@ -1,5 +1,5 @@
 import { dialog, ipcMain } from "electron";
-import { getOrCreateDevice, renameDevice, loadAuthState, saveAuthState } from "@tany-desktop/shared";
+import { getOrCreateDevice, renameDevice, loadAuthState, saveAuthState, config } from "@tany-desktop/shared";
 import {
   recordWebRoutine,
   parseCodegenScript,
@@ -12,8 +12,27 @@ import * as routineService from "./routineService";
 import type { SaveRoutineInput } from "./routineService";
 import { getServiceStatus, startService, stopService } from "./serviceManager";
 
+/**
+ * Same address a real /v1/devices/register call would send (see
+ * pairing.ts's registerDevice), computed directly from config instead of
+ * actually starting a tunnel - the GUI just needs to *display* it (e.g. so
+ * the user can paste it straight into a WhatsApp message to TANY), not
+ * manage the tunnel itself; that's the running mcp-server's job.
+ */
+function computeMcpAddress(): string {
+  if (config.tanyCloud.publicMcpAddressOverride) {
+    return `http://${config.tanyCloud.publicMcpAddressOverride}`;
+  }
+  if (config.tunnel.enabled && config.tunnel.serverAddr && config.tunnel.remotePort) {
+    return `http://${config.tunnel.serverAddr}:${config.tunnel.remotePort}`;
+  }
+  // No tunnel configured - this address only works on the local network,
+  // not from TANY in the cloud. Still useful to show for LAN-only testing.
+  return `http://127.0.0.1:${config.mcpServer.port}`;
+}
+
 export function registerIpcHandlers(): void {
-  ipcMain.handle("device:get", () => getOrCreateDevice());
+  ipcMain.handle("device:get", () => ({ ...getOrCreateDevice(), mcpAddress: computeMcpAddress() }));
   ipcMain.handle("device:rename", (_e, name: string) => renameDevice(name));
 
   ipcMain.handle("routines:list", () => routineService.listRoutines());
