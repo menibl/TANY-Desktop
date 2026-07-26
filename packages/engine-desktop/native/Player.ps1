@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Replays a desktop-app routine recorded by Recorder.ps1 (spec section 4/11
   desktop engine) - the UI Automation equivalent of engine-web's player.ts.
