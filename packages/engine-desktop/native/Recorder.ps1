@@ -240,5 +240,9 @@ Flush-PendingFill
 # one-element array, which would silently break JSON.parse(...) as Step[]
 # on the Node side for any recording with just one step.
 $json = ConvertTo-Json -InputObject $script:steps -Depth 10
-Set-Content -Path $OutFile -Value $json -Encoding UTF8
+# Set-Content -Encoding UTF8 always prepends a BOM on Windows PowerShell
+# 5.1 (unlike PowerShell 7+) - Node's JSON.parse doesn't strip a leading
+# BOM character and throws "Unexpected token" on it. Write BOM-less UTF-8
+# explicitly instead.
+[System.IO.File]::WriteAllText($OutFile, $json, (New-Object System.Text.UTF8Encoding($false)))
 Write-Host "[recorder] recorded $($script:steps.Count) step(s), written to $OutFile"
