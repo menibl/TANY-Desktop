@@ -1,11 +1,20 @@
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Server } from "http";
-import { config, getOrCreateDevice } from "@tany-desktop/shared";
+import {
+  config,
+  getOrCreateDevice,
+  listRoutines,
+  hasAuthState,
+  loadAuthState,
+  saveAuthState,
+  loadRoutineDefinition,
+} from "@tany-desktop/shared";
 import { buildMcpServer } from "./mcp";
 import { requireApiKey } from "./auth";
 import { startTunnel, stopTunnel } from "./tunnel";
 import { registerDevice, syncRoutinesIfChanged } from "./pairing";
+import { keepSessionAlive } from "@tany-desktop/engine-web";
 
 export interface McpServerHandle {
   stop: () => Promise<void>;
@@ -72,15 +81,56 @@ export function startMcpServer(): Promise<McpServerHandle> {
       );
       console.log(`[tany-desktop] Health check: http://${config.mcpServer.host}:${config.mcpServer.port}/health`);
       void connectToTanyCloud();
+      const keepAliveInterval = startAuthKeepAlive();
       resolve({
         stop: () =>
           new Promise((res) => {
+            clearInterval(keepAliveInterval);
             stopTunnel();
             httpServer.close(() => res());
           }),
       });
     });
   });
+}
+
+/**
+ * Some sites (banks especially) expire a login session after a few minutes
+ * of no requests - server-side, based on time since the last request, not
+ * local mouse/keyboard idleness, so nothing client-side can prevent it.
+ * Periodically re-visiting the site headlessly with the saved session is
+ * real activity that resets that clock, so routines that need a saved
+ * login (see engine-web/recorder.ts's one-time-login flow) don't keep
+ * expiring and needing "רענון התחברות" by hand. Runs for every web routine
+ * that has a saved session; there's no per-routine opt-out yet.
+ */
+function startAuthKeepAlive(): NodeJS.Timeout {
+  const intervalMs = Number(process.env.TANY_DESKTOP_KEEPALIVE_INTERVAL_MS || 5 * 60_000);
+
+  const runOnce = async () => {
+    for (const routine of listRoutines()) {
+      if (routine.type !== "web" || !hasAuthState(routine.routineId)) continue;
+      const authState = loadAuthState(routine.routineId);
+      if (!authState) continue;
+      const definition = loadRoutineDefinition(routine.scriptRef);
+      if (!definition.startUrl) continue;
+
+      try {
+        const refreshed = await keepSessionAlive(definition.startUrl, authState);
+        saveAuthState(routine.routineId, refreshed);
+        console.log(`[tany-desktop] keep-alive refreshed session for routine "${routine.name}"`);
+      } catch (err) {
+        console.error(
+          `[tany-desktop] keep-alive failed for routine "${routine.name}":`,
+          err instanceof Error ? err.message : err
+        );
+      }
+    }
+  };
+
+  const interval = setInterval(() => void runOnce(), intervalMs);
+  interval.unref();
+  return interval;
 }
 
 /**
