@@ -120,6 +120,12 @@ async function executeFrom(
       if (err instanceof StepError) throw err;
       const message = err instanceof Error ? err.message : String(err);
       const reason = /timeout/i.test(message) ? "element_not_found" : "automation_error";
+      // Optional steps (e.g. a cookie-consent/promo popup's close button
+      // that doesn't reliably appear every visit) skip past a missing
+      // element instead of failing the whole run over it - but a real
+      // automation error, not just "wasn't there", still isn't safe to
+      // silently continue past.
+      if (step.optional && reason === "element_not_found") continue;
       throw new StepError(i, reason, message);
     }
   }

@@ -69,6 +69,7 @@ label { font-size: 13px; font-weight: 600; display: block; margin-top: 10px; }
 .step-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; background: #eef; font-size: 11px; margin-inline-end: 6px; }
 .step-badge.otp { background: #fee9c8; }
 .step-badge.cred { background: #f5d0d0; }
+.step-badge.optional { background: #dff0d8; }
 
 .badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #555; }
 .badge.online { background: #2e9e5b; }

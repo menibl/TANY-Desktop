@@ -102,6 +102,41 @@ async function main() {
     assert(badResult.status === "failed", `expected failed, got ${badResult.status}`);
     assert(badResult.failed_step === 1, `expected failure at step 1, got ${badResult.failed_step}`);
 
+    console.log("Test 5: optional step with a missing element is skipped, run still succeeds");
+    const withOptionalPopupClose = baseDefinition(port, {
+      steps: [
+        { index: 0, type: "goto", url: `http://127.0.0.1:${port}/` },
+        // Simulates a cookie-consent/promo popup close button that isn't
+        // actually present on this fixture page at all - should be skipped,
+        // not fail the run, because it's marked optional.
+        { index: 1, type: "click", selectorKind: "css", selector: "#does-not-exist", optional: true },
+        { index: 2, type: "fill", selectorKind: "css", selector: "#username", credentialField: "username" },
+        { index: 3, type: "fill", selectorKind: "css", selector: "#password", credentialField: "password" },
+        { index: 4, type: "click", selectorKind: "css", selector: "#login-btn" },
+        { index: 5, type: "waitForSelector", selectorKind: "css", selector: "#otp-input" },
+        { index: 6, type: "otp_injection", selectorKind: "css", selector: "#otp-input", promptHint: "קוד אימות" },
+        { index: 7, type: "click", selectorKind: "css", selector: "#otp-btn" },
+        { index: 8, type: "waitForSelector", selectorKind: "css", selector: "#balance" },
+        { index: 9, type: "extract", selectorKind: "css", selector: "#balance", extractAs: "balance" },
+      ],
+    });
+    const pausedOptional = await engine.run(withOptionalPopupClose, credential);
+    assert(pausedOptional.status === "awaiting_otp", `expected awaiting_otp past the skipped optional step, got ${pausedOptional.status}`);
+    const doneOptional = await engine.submitOtp(pausedOptional.continuation_token, "123456");
+    assert(doneOptional.status === "success", `expected success, got ${JSON.stringify(doneOptional)}`);
+    assert(doneOptional.result.balance.includes("4,320"), "run completed normally despite the missing optional element");
+
+    console.log("Test 6: a *non-optional* missing element still fails normally (optional isn't a blanket bypass)");
+    const nonOptionalStillFails = baseDefinition(port, {
+      steps: [
+        { index: 0, type: "goto", url: `http://127.0.0.1:${port}/` },
+        { index: 1, type: "click", selectorKind: "css", selector: "#does-not-exist" },
+      ],
+    });
+    const stillFails = await engine.run(nonOptionalStillFails, credential);
+    assert(stillFails.status === "failed", `expected failed, got ${stillFails.status}`);
+    assert(stillFails.failed_step === 1, `expected failure at step 1, got ${stillFails.failed_step}`);
+
     console.log("\nAll replay engine smoke tests passed.");
   } finally {
     server.close();
