@@ -88,6 +88,15 @@ export interface Step {
   extractAs?: string;
   /** For "otp_injection" steps: hint shown to the user when OTP is requested. */
   promptHint?: string;
+  /**
+   * If the element isn't found, skip this step instead of failing the whole
+   * run - for things like a cookie-consent/promo popup's close button that
+   * doesn't reliably appear on every visit. Only suppresses "the element
+   * wasn't there" (reason "element_not_found"); a real automation error on
+   * an optional step still fails the run, since that's not "wasn't there",
+   * it's something actually going wrong.
+   */
+  optional?: boolean;
 }
 
 export interface RoutineDefinition {

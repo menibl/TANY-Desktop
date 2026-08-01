@@ -230,6 +230,12 @@ try {
     if ($step.selectorKind -eq "uia" -and $step.selector) {
       $element = Wait-UiaElement $mainWindow $step.selector 20000
       if ($null -eq $element) {
+        if ($step.optional) {
+          # Optional step (e.g. closing a popup/dialog that doesn't reliably
+          # appear every run) - skip past it instead of failing the whole run.
+          Write-Host "[player] optional step $i - element not found, skipping"
+          continue
+        }
         $result = @{
           status      = "failed"
           failed_step = $i

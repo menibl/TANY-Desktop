@@ -206,6 +206,7 @@ async function selectRoutine(routineId) {
       const badges = [`<span class="step-badge">${STEP_LABELS[s.type] || s.type}</span>`];
       if (s.type === "otp_injection") badges.push('<span class="step-badge otp">OTP</span>');
       if (s.credentialField) badges.push(`<span class="step-badge cred">סוד: ${escapeHtml(s.credentialField)}</span>`);
+      if (s.optional) badges.push('<span class="step-badge optional">אופציונלי</span>');
       const valueTxt = s.type === "fill" && !s.credentialField ? ` = "${escapeHtml(s.value ?? "")}"` : "";
       return `<li>${badges.join(" ")} ${escapeHtml(describeSelector(s))}${valueTxt}</li>`;
     })
@@ -473,6 +474,7 @@ function renderNewSteps(container) {
         <span class="step-badge">${STEP_LABELS.extract}</span>
         <input type="text" class="extract-selector" placeholder="CSS selector, למשל .balance" style="width:45%">
         <input type="text" class="extract-field" placeholder="שם שדה פלט, למשל balance" style="width:35%">
+        <label><input type="checkbox" class="optional-toggle"> שלב אופציונלי - דלג אם האלמנט לא נמצא (במקום להיכשל)</label>
       `;
       list.appendChild(li);
       return;
@@ -514,6 +516,10 @@ function renderNewSteps(container) {
         fieldInput.style.display = toggle.checked ? "inline-block" : "none";
       });
       li.appendChild(extractRow);
+
+      const optionalRow = document.createElement("div");
+      optionalRow.innerHTML = `<label><input type="checkbox" class="optional-toggle"> שלב אופציונלי - למשל כפתור סגירת פופ-אפ/הודעת cookies שלא תמיד מופיע. אם האלמנט לא נמצא, הריצה תמשיך לשלב הבא במקום להיכשל.</label>`;
+      li.appendChild(optionalRow);
     }
 
     list.appendChild(li);
@@ -526,11 +532,13 @@ function collectStepsAndCredential(container) {
   container.querySelectorAll(".new-steps > li").forEach((li) => {
     const idx = Number(li.dataset.idx);
     const original = newRoutineState.steps[idx];
+    const optionalToggle = li.querySelector(".optional-toggle");
+    const optionalFlag = optionalToggle && optionalToggle.checked ? { optional: true } : {};
 
     if (original.type === "extract") {
       const selector = li.querySelector(".extract-selector").value.trim();
       const extractAs = li.querySelector(".extract-field").value.trim();
-      steps.push({ ...original, index: steps.length, selector, extractAs });
+      steps.push({ ...original, index: steps.length, selector, extractAs, ...optionalFlag });
       return;
     }
 
@@ -540,15 +548,15 @@ function collectStepsAndCredential(container) {
         const fieldName = li.querySelector(".cred-field-name").value.trim() || `field_${idx}`;
         credential[fieldName] = original.value ?? "";
         const { value, ...rest } = original;
-        steps.push({ ...rest, index: steps.length, credentialField: fieldName });
+        steps.push({ ...rest, index: steps.length, credentialField: fieldName, ...optionalFlag });
       } else if (mode === "otp") {
         const { value, ...rest } = original;
         steps.push({ ...rest, index: steps.length, type: "otp_injection", promptHint: "קוד אימות" });
       } else {
-        steps.push({ ...original, index: steps.length });
+        steps.push({ ...original, index: steps.length, ...optionalFlag });
       }
     } else {
-      steps.push({ ...original, index: steps.length });
+      steps.push({ ...original, index: steps.length, ...optionalFlag });
     }
 
     // A step the user clicked/targeted during recording already carries a
